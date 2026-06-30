@@ -9,8 +9,7 @@ import { CheckoutOrder } from '../../core/models/order.model';
 import { AuthService } from '../../core/services/auth.service';
 import { CartService } from '../../core/services/cart.service';
 import { CheckoutService } from '../../core/services/checkout.service';
-import { OrdersService } from '../../core/services/orders.service';
-import { ProductsService } from '../../core/services/products.service';
+import { OrderPlacementService } from '../../core/services/order-placement.service';
 
 @Component({
   selector: 'app-checkout',
@@ -24,8 +23,7 @@ export class Checkout {
   private readonly authService = inject(AuthService);
   private readonly cartService = inject(CartService);
   private readonly checkoutService = inject(CheckoutService);
-  private readonly ordersService = inject(OrdersService);
-  private readonly productsService = inject(ProductsService);
+  private readonly orderPlacementService = inject(OrderPlacementService);
 
   readonly summary$ = this.cartService.summary$;
   readonly canCheckout$ = this.summary$.pipe(map((summary) => summary.items.length > 0));
@@ -40,6 +38,7 @@ export class Checkout {
   lastOrder: CheckoutOrder | null = null;
   whatsappUrl: string | null = null;
   errorMessage: string | null = null;
+  isSubmitting = false;
 
   constructor() {
     const user = this.authService.currentUser;
@@ -52,33 +51,32 @@ export class Checkout {
     }
   }
 
-  prepareOrder(summary: CartSummary): void {
+  async prepareOrder(summary: CartSummary): Promise<void> {
     if (this.checkoutForm.invalid) {
       this.checkoutForm.markAllAsTouched();
       return;
     }
 
-    const stockValidation = this.productsService.validateCartItems(summary.items);
+    try {
+      this.isSubmitting = true;
 
-    if (!stockValidation.valid) {
-      this.errorMessage = stockValidation.message;
-      return;
+      const order = await this.orderPlacementService.placeOrder(
+        summary,
+        {
+          ...this.checkoutForm.getRawValue(),
+          notes: this.checkoutForm.controls.notes.value || null,
+        },
+        this.authService.currentUser?.id ?? 'mock-user',
+      );
+
+      this.errorMessage = null;
+      this.lastOrder = order;
+      this.whatsappUrl = this.checkoutService.buildWhatsappUrl(order);
+      this.cartService.clear();
+    } catch {
+      this.errorMessage = 'No se pudo guardar el pedido. Intentalo de nuevo.';
+    } finally {
+      this.isSubmitting = false;
     }
-
-    const order = this.checkoutService.buildOrder(
-      summary,
-      {
-        ...this.checkoutForm.getRawValue(),
-        notes: this.checkoutForm.controls.notes.value || null,
-      },
-      this.authService.currentUser?.id ?? 'mock-user',
-    );
-
-    this.errorMessage = null;
-    this.lastOrder = order;
-    this.whatsappUrl = this.checkoutService.buildWhatsappUrl(order);
-    this.ordersService.saveDraft(order);
-    this.productsService.applyOrder(order.items);
-    this.cartService.clear();
   }
 }

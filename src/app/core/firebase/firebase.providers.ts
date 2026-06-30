@@ -7,9 +7,10 @@ import { provideFirebaseApp } from '@angular/fire/app';
 import { provideFirestore } from '@angular/fire/firestore';
 
 import { environment } from '../../../environments/environment';
+import { isFirebaseConfigured } from './firebase.config';
 
 export function provideMarturaFirebase(): EnvironmentProviders {
-  if (!environment.firebase.enabled) {
+  if (!isFirebaseConfigured) {
     return makeEnvironmentProviders([]);
   }
 

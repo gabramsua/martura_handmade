@@ -75,7 +75,9 @@
             <p class="form-error">{{ errorMessage }}</p>
           }
 
-          <button class="button primary" type="submit">Generar mensaje</button>
+          <button class="button primary" type="submit" [disabled]="isSubmitting">
+            {{ isSubmitting ? 'Guardando pedido...' : 'Generar mensaje' }}
+          </button>
         </form>
 
         <aside class="order-preview">

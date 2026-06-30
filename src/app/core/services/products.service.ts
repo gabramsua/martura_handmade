@@ -1,10 +1,23 @@
 import { Injectable, inject } from '@angular/core';
-import { BehaviorSubject, combineLatest, map, Observable, of } from 'rxjs';
+import {
+  Firestore,
+  collection,
+  collectionData,
+  deleteDoc,
+  doc,
+  orderBy,
+  query,
+  setDoc,
+  writeBatch,
+} from '@angular/fire/firestore';
+import { BehaviorSubject, combineLatest, map, Observable } from 'rxjs';
 
-import { MOCK_PRODUCTS, PRODUCT_CATEGORIES } from '../data/mock-products';
+import { MOCK_PRODUCTS } from '../data/mock-products';
 import { Product, ProductDraft, ProductFilters } from '../models/product.model';
 import { CartItem } from '../models/cart.model';
 import { OrderItem } from '../models/order.model';
+import { firestoreCollections, isFirebaseConfigured } from '../firebase/firebase.config';
+import { reviveProduct } from '../firebase/firestore.mappers';
 import { LocalStorageService } from './local-storage.service';
 
 const INITIAL_FILTERS: ProductFilters = {
@@ -16,13 +29,17 @@ const PRODUCTS_STORAGE_KEY = 'martura_products';
 
 @Injectable({ providedIn: 'root' })
 export class ProductsService {
+  private readonly firestore = inject(Firestore, { optional: true });
   private readonly localStorageService = inject(LocalStorageService);
   private readonly productsSubject = new BehaviorSubject<Product[]>(
-    this.localStorageService.read(PRODUCTS_STORAGE_KEY, MOCK_PRODUCTS, this.reviveProducts),
+    this.readInitialProducts(),
   );
   private readonly filtersSubject = new BehaviorSubject<ProductFilters>(INITIAL_FILTERS);
+  private readonly loadingSubject = new BehaviorSubject<boolean>(
+    isFirebaseConfigured && !!this.firestore,
+  );
 
-  readonly loading$ = of(false);
+  readonly loading$ = this.loadingSubject.asObservable();
   readonly products$ = this.productsSubject.asObservable();
   readonly filters$ = this.filtersSubject.asObservable();
   readonly categories$ = this.products$.pipe(
@@ -40,6 +57,29 @@ export class ProductsService {
   readonly featuredProducts$ = this.products$.pipe(
     map((products) => products.filter((product) => product.featured)),
   );
+
+  constructor() {
+    if (!isFirebaseConfigured || !this.firestore) {
+      return;
+    }
+
+    const productsCollection = collection(this.firestore, firestoreCollections.products);
+    const productsQuery = query(productsCollection, orderBy('createdAt', 'desc'));
+
+    collectionData(productsQuery, { idField: 'id' }).subscribe({
+      next: (products) => {
+        this.productsSubject.next(
+          (products as Array<Product & { createdAt: unknown }>).map((product) =>
+            reviveProduct(product),
+          ),
+        );
+        this.loadingSubject.next(false);
+      },
+      error: () => {
+        this.loadingSubject.next(false);
+      },
+    });
+  }
 
   updateFilters(partial: Partial<ProductFilters>): void {
     this.filtersSubject.next({ ...this.filtersSubject.value, ...partial });
@@ -77,38 +117,100 @@ export class ProductsService {
     return { valid: true, message: null };
   }
 
-  createProduct(draft: ProductDraft): void {
+  async createProduct(draft: ProductDraft): Promise<void> {
     const product = this.draftToProduct(draft);
+
+    if (isFirebaseConfigured && this.firestore) {
+      await setDoc(this.getProductDoc(product.id), product);
+      return;
+    }
+
     this.setProducts([product, ...this.productsSubject.value]);
   }
 
-  updateProduct(productId: string, draft: ProductDraft): void {
+  async updateProduct(productId: string, draft: ProductDraft): Promise<void> {
+    const updatedProduct = this.productsSubject.value.find((product) => product.id === productId);
+
+    if (!updatedProduct) {
+      return;
+    }
+
+    const nextProduct = {
+      ...this.draftToProduct(draft, updatedProduct),
+      id: updatedProduct.id,
+      createdAt: updatedProduct.createdAt,
+    };
+
+    if (isFirebaseConfigured && this.firestore) {
+      await setDoc(this.getProductDoc(productId), nextProduct);
+      return;
+    }
+
     this.setProducts(
       this.productsSubject.value.map((product) =>
         product.id === productId
-          ? {
-              ...this.draftToProduct(draft, product),
-              id: product.id,
-              createdAt: product.createdAt,
-            }
+          ? nextProduct
           : product,
       ),
     );
   }
 
-  deleteProduct(productId: string): void {
+  async deleteProduct(productId: string): Promise<void> {
+    if (isFirebaseConfigured && this.firestore) {
+      await deleteDoc(this.getProductDoc(productId));
+      return;
+    }
+
     this.setProducts(this.productsSubject.value.filter((product) => product.id !== productId));
   }
 
-  resetProducts(): void {
+  async resetProducts(): Promise<void> {
+    if (isFirebaseConfigured && this.firestore) {
+      const batch = writeBatch(this.firestore);
+
+      for (const product of this.productsSubject.value) {
+        batch.delete(this.getProductDoc(product.id));
+      }
+
+      for (const product of MOCK_PRODUCTS) {
+        batch.set(this.getProductDoc(product.id), product);
+      }
+
+      await batch.commit();
+      return;
+    }
+
     this.setProducts(MOCK_PRODUCTS);
   }
 
-  applyOrder(orderItems: OrderItem[]): void {
+  async applyOrder(orderItems: OrderItem[]): Promise<void> {
     const orderedQuantityByProduct = orderItems.reduce<Record<string, number>>((accumulator, item) => {
       accumulator[item.productId] = (accumulator[item.productId] ?? 0) + item.quantity;
       return accumulator;
     }, {});
+
+    if (isFirebaseConfigured && this.firestore) {
+      const batch = writeBatch(this.firestore);
+
+      for (const product of this.productsSubject.value) {
+        const orderedQuantity = orderedQuantityByProduct[product.id] ?? 0;
+
+        if (!orderedQuantity) {
+          continue;
+        }
+
+        batch.set(
+          this.getProductDoc(product.id),
+          {
+            ...product,
+            stock: Math.max(0, product.stock - orderedQuantity),
+          },
+        );
+      }
+
+      await batch.commit();
+      return;
+    }
 
     this.setProducts(
       this.productsSubject.value.map((product) => ({
@@ -173,10 +275,17 @@ export class ProductsService {
     this.localStorageService.write(PRODUCTS_STORAGE_KEY, products);
   }
 
-  private reviveProducts(products: Product[]): Product[] {
-    return products.map((product) => ({
-      ...product,
-      createdAt: new Date(product.createdAt),
-    }));
+  private readInitialProducts(): Product[] {
+    if (isFirebaseConfigured) {
+      return [];
+    }
+
+    return this.localStorageService.read(PRODUCTS_STORAGE_KEY, MOCK_PRODUCTS, (products) =>
+      (products as Array<Product & { createdAt: unknown }>).map((product) => reviveProduct(product)),
+    );
+  }
+
+  private getProductDoc(productId: string) {
+    return doc(this.firestore!, firestoreCollections.products, productId);
   }
 }

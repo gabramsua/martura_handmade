@@ -1,6 +1,7 @@
 import { AsyncPipe, CurrencyPipe, DatePipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { switchMap } from 'rxjs';
 
 import { AuthService } from '../../core/services/auth.service';
 import { OrdersService } from '../../core/services/orders.service';
@@ -16,5 +17,7 @@ export class Orders {
   private readonly authService = inject(AuthService);
   private readonly ordersService = inject(OrdersService);
 
-  readonly orders$ = this.ordersService.getOrdersForUser(this.authService.currentUser?.id ?? '');
+  readonly orders$ = this.authService.user$.pipe(
+    switchMap((user) => this.ordersService.getOrdersForUser(user?.id ?? null)),
+  );
 }

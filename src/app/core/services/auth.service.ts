@@ -10,7 +10,7 @@ import {
 import { BehaviorSubject, map } from 'rxjs';
 
 import { AppUser, LoginCredentials } from '../models/user.model';
-import { environment } from '../../../environments/environment';
+import { authMode, isAdminEmail, isFirebaseConfigured } from '../firebase/firebase.config';
 import { LocalStorageService } from './local-storage.service';
 
 const STORAGE_KEY = 'martura_mock_user';
@@ -20,24 +20,32 @@ export class AuthService {
   private readonly firebaseAuth = inject(Auth, { optional: true });
   private readonly localStorageService = inject(LocalStorageService);
   private readonly userSubject = new BehaviorSubject<AppUser | null>(this.readStoredUser());
+  private readonly readyPromise = new Promise<void>((resolve) => {
+    this.resolveReady = resolve;
+  });
+  private resolveReady: () => void = () => undefined;
+  private readyResolved = false;
 
   readonly user$ = this.userSubject.asObservable();
   readonly isAuthenticated$ = this.user$.pipe(map((user) => user !== null));
   readonly isAdmin$ = this.user$.pipe(map((user) => user?.role === 'admin'));
-  readonly mode = environment.firebase.enabled ? 'firebase' : 'mock';
+  readonly mode = authMode;
 
   constructor() {
-    if (!environment.firebase.enabled || !this.firebaseAuth) {
+    if (!isFirebaseConfigured || !this.firebaseAuth) {
+      this.markReady();
       return;
     }
 
     onAuthStateChanged(this.firebaseAuth, (firebaseUser) => {
       if (!firebaseUser) {
         this.userSubject.next(null);
+        this.markReady();
         return;
       }
 
       this.userSubject.next(this.mapFirebaseUser(firebaseUser));
+      this.markReady();
     });
   }
 
@@ -45,8 +53,12 @@ export class AuthService {
     return this.userSubject.value;
   }
 
+  async ensureReady(): Promise<void> {
+    await this.readyPromise;
+  }
+
   async login(credentials: LoginCredentials): Promise<void> {
-    if (environment.firebase.enabled && this.firebaseAuth) {
+    if (isFirebaseConfigured && this.firebaseAuth) {
       const provider = new GoogleAuthProvider();
       const { user } = await signInWithPopup(this.firebaseAuth, provider);
 
@@ -77,7 +89,7 @@ export class AuthService {
   }
 
   async logout(): Promise<void> {
-    if (environment.firebase.enabled && this.firebaseAuth) {
+    if (isFirebaseConfigured && this.firebaseAuth) {
       await signOut(this.firebaseAuth);
       this.userSubject.next(null);
       return;
@@ -88,7 +100,7 @@ export class AuthService {
   }
 
   private readStoredUser(): AppUser | null {
-    if (environment.firebase.enabled) {
+    if (isFirebaseConfigured) {
       return null;
     }
 
@@ -109,16 +121,21 @@ export class AuthService {
     email: string | null;
   }): AppUser {
     const email = firebaseUser.email ?? '';
-    const normalizedEmail = email.toLowerCase();
-    const isAdmin = environment.firebase.adminEmails.some(
-      (adminEmail) => adminEmail.toLowerCase() === normalizedEmail,
-    );
 
     return {
       id: firebaseUser.uid,
       name: firebaseUser.displayName || email || 'Usuario Martura',
       email,
-      role: isAdmin ? 'admin' : 'customer',
+      role: isAdminEmail(email) ? 'admin' : 'customer',
     };
+  }
+
+  private markReady(): void {
+    if (this.readyResolved) {
+      return;
+    }
+
+    this.readyResolved = true;
+    this.resolveReady();
   }
 }

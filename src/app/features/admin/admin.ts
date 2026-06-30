@@ -54,7 +54,7 @@ export class Admin {
     }),
   );
 
-  saveProduct(): void {
+  async saveProduct(): Promise<void> {
     if (this.productForm.invalid) {
       this.productForm.markAllAsTouched();
       return;
@@ -64,9 +64,9 @@ export class Admin {
     const editingProductId = this.editingProductId();
 
     if (editingProductId) {
-      this.productsService.updateProduct(editingProductId, draft);
+      await this.productsService.updateProduct(editingProductId, draft);
     } else {
-      this.productsService.createProduct(draft);
+      await this.productsService.createProduct(draft);
     }
 
     this.resetForm();
@@ -90,16 +90,16 @@ export class Admin {
     });
   }
 
-  deleteProduct(productId: string): void {
-    this.productsService.deleteProduct(productId);
+  async deleteProduct(productId: string): Promise<void> {
+    await this.productsService.deleteProduct(productId);
 
     if (this.editingProductId() === productId) {
       this.resetForm();
     }
   }
 
-  resetProducts(): void {
-    this.productsService.resetProducts();
+  async resetProducts(): Promise<void> {
+    await this.productsService.resetProducts();
     this.resetForm();
   }
 
@@ -121,12 +121,12 @@ export class Admin {
     });
   }
 
-  markOrderAsSent(orderId: string): void {
-    this.ordersService.markAsSent(orderId);
+  async markOrderAsSent(orderId: string): Promise<void> {
+    await this.ordersService.markAsSent(orderId);
   }
 
-  clearOrders(): void {
-    this.ordersService.clearOrders();
+  async clearOrders(): Promise<void> {
+    await this.ordersService.clearOrders();
   }
 
   private formToDraft(): ProductDraft {
