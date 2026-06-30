@@ -10,6 +10,13 @@
   margin-bottom: 26px;
 }
 
+.heading-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
 .admin-heading h1,
 .panel-title h2 {
   font-family: Georgia, "Times New Roman", serif;
@@ -126,7 +133,8 @@
 
 .form-actions button,
 .row-actions button,
-.order-card button {
+.order-card button,
+.clear-orders-button {
   background: var(--ink);
   color: #fff;
   font-weight: 800;
@@ -205,6 +213,13 @@
 .muted {
   color: var(--muted);
   margin: 0;
+}
+
+.clear-orders-button {
+  background: var(--sand);
+  color: var(--ink);
+  margin-top: 12px;
+  width: 100%;
 }
 
 @media (max-width: 980px) {

@@ -1,18 +1,23 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { BehaviorSubject, combineLatest, map, Observable, of } from 'rxjs';
 
 import { MOCK_PRODUCTS, PRODUCT_CATEGORIES } from '../data/mock-products';
 import { Product, ProductDraft, ProductFilters } from '../models/product.model';
+import { LocalStorageService } from './local-storage.service';
 
 const INITIAL_FILTERS: ProductFilters = {
   categorySlug: null,
   query: '',
   onlyOffers: false,
 };
+const PRODUCTS_STORAGE_KEY = 'martura_products';
 
 @Injectable({ providedIn: 'root' })
 export class ProductsService {
-  private readonly productsSubject = new BehaviorSubject<Product[]>(MOCK_PRODUCTS);
+  private readonly localStorageService = inject(LocalStorageService);
+  private readonly productsSubject = new BehaviorSubject<Product[]>(
+    this.localStorageService.read(PRODUCTS_STORAGE_KEY, MOCK_PRODUCTS, this.reviveProducts),
+  );
   private readonly filtersSubject = new BehaviorSubject<ProductFilters>(INITIAL_FILTERS);
 
   readonly loading$ = of(false);
@@ -50,11 +55,11 @@ export class ProductsService {
 
   createProduct(draft: ProductDraft): void {
     const product = this.draftToProduct(draft);
-    this.productsSubject.next([product, ...this.productsSubject.value]);
+    this.setProducts([product, ...this.productsSubject.value]);
   }
 
   updateProduct(productId: string, draft: ProductDraft): void {
-    this.productsSubject.next(
+    this.setProducts(
       this.productsSubject.value.map((product) =>
         product.id === productId
           ? {
@@ -68,7 +73,11 @@ export class ProductsService {
   }
 
   deleteProduct(productId: string): void {
-    this.productsSubject.next(this.productsSubject.value.filter((product) => product.id !== productId));
+    this.setProducts(this.productsSubject.value.filter((product) => product.id !== productId));
+  }
+
+  resetProducts(): void {
+    this.setProducts(MOCK_PRODUCTS);
   }
 
   private applyFilters(products: Product[], filters: ProductFilters): Product[] {
@@ -119,5 +128,17 @@ export class ProductsService {
       .trim()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/(^-|-$)+/g, '');
+  }
+
+  private setProducts(products: Product[]): void {
+    this.productsSubject.next(products);
+    this.localStorageService.write(PRODUCTS_STORAGE_KEY, products);
+  }
+
+  private reviveProducts(products: Product[]): Product[] {
+    return products.map((product) => ({
+      ...product,
+      createdAt: new Date(product.createdAt),
+    }));
   }
 }

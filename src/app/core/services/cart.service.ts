@@ -1,14 +1,19 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { BehaviorSubject, map } from 'rxjs';
 
 import { CartItem, CartSummary } from '../models/cart.model';
 import { Product } from '../models/product.model';
+import { LocalStorageService } from './local-storage.service';
 
 const SHIPPING_PRICE = 4.95;
+const CART_STORAGE_KEY = 'martura_cart';
 
 @Injectable({ providedIn: 'root' })
 export class CartService {
-  private readonly itemsSubject = new BehaviorSubject<CartItem[]>([]);
+  private readonly localStorageService = inject(LocalStorageService);
+  private readonly itemsSubject = new BehaviorSubject<CartItem[]>(
+    this.localStorageService.read(CART_STORAGE_KEY, [], this.reviveItems),
+  );
 
   readonly items$ = this.itemsSubject.asObservable();
   readonly summary$ = this.items$.pipe(map((items) => this.buildSummary(items)));
@@ -21,7 +26,7 @@ export class CartService {
     );
 
     if (existingItem) {
-      this.itemsSubject.next(
+      this.setItems(
         currentItems.map((item) =>
           item === existingItem ? { ...item, quantity: item.quantity + quantity } : item,
         ),
@@ -29,7 +34,7 @@ export class CartService {
       return;
     }
 
-    this.itemsSubject.next([...currentItems, { product, variant, quantity }]);
+    this.setItems([...currentItems, { product, variant, quantity }]);
   }
 
   updateQuantity(productId: string, variant: string, quantity: number): void {
@@ -38,7 +43,7 @@ export class CartService {
       return;
     }
 
-    this.itemsSubject.next(
+    this.setItems(
       this.itemsSubject.value.map((item) =>
         item.product.id === productId && item.variant === variant ? { ...item, quantity } : item,
       ),
@@ -46,7 +51,7 @@ export class CartService {
   }
 
   removeItem(productId: string, variant: string): void {
-    this.itemsSubject.next(
+    this.setItems(
       this.itemsSubject.value.filter(
         (item) => item.product.id !== productId || item.variant !== variant,
       ),
@@ -54,7 +59,7 @@ export class CartService {
   }
 
   clear(): void {
-    this.itemsSubject.next([]);
+    this.setItems([]);
   }
 
   private buildSummary(items: CartItem[]): CartSummary {
@@ -71,5 +76,20 @@ export class CartService {
       total: subtotal + shipping,
       totalItems: items.reduce((total, item) => total + item.quantity, 0),
     };
+  }
+
+  private setItems(items: CartItem[]): void {
+    this.itemsSubject.next(items);
+    this.localStorageService.write(CART_STORAGE_KEY, items);
+  }
+
+  private reviveItems(items: CartItem[]): CartItem[] {
+    return items.map((item) => ({
+      ...item,
+      product: {
+        ...item.product,
+        createdAt: new Date(item.product.createdAt),
+      },
+    }));
   }
 }

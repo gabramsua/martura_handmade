@@ -98,6 +98,11 @@ export class Admin {
     }
   }
 
+  resetProducts(): void {
+    this.productsService.resetProducts();
+    this.resetForm();
+  }
+
   resetForm(): void {
     this.editingProductId.set(null);
     this.productForm.reset({
@@ -118,6 +123,10 @@ export class Admin {
 
   markOrderAsSent(orderId: string): void {
     this.ordersService.markAsSent(orderId);
+  }
+
+  clearOrders(): void {
+    this.ordersService.clearOrders();
   }
 
   private formToDraft(): ProductDraft {
