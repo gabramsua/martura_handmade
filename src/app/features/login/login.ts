@@ -19,6 +19,7 @@ export class Login {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
 
+  readonly authMode = this.authService.mode;
   readonly user$ = this.authService.user$;
   readonly requestedRole = (this.route.snapshot.queryParamMap.get('role') as UserRole | null) ?? 'customer';
   readonly returnUrl = this.route.snapshot.queryParamMap.get('returnUrl') ?? '/';
@@ -30,18 +31,28 @@ export class Login {
     ],
     role: [this.requestedRole, [Validators.required]],
   });
+  errorMessage: string | null = null;
+  isSubmitting = false;
 
-  login(): void {
+  async login(): Promise<void> {
     if (this.loginForm.invalid) {
       this.loginForm.markAllAsTouched();
       return;
     }
 
-    this.authService.login(this.loginForm.getRawValue());
-    this.router.navigateByUrl(this.returnUrl);
+    try {
+      this.isSubmitting = true;
+      this.errorMessage = null;
+      await this.authService.login(this.loginForm.getRawValue());
+      await this.router.navigateByUrl(this.returnUrl);
+    } catch (error) {
+      this.errorMessage = error instanceof Error ? error.message : 'No se pudo iniciar sesion.';
+    } finally {
+      this.isSubmitting = false;
+    }
   }
 
-  logout(): void {
-    this.authService.logout();
+  async logout(): Promise<void> {
+    await this.authService.logout();
   }
 }

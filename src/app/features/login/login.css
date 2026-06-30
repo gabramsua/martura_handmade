@@ -78,3 +78,12 @@
   min-height: 44px;
   padding: 10px 12px;
 }
+
+.login-error {
+  background: #f8e6e1;
+  border-radius: 6px;
+  color: #8a3f32;
+  font-weight: 700;
+  margin: 0;
+  padding: 10px 12px;
+}

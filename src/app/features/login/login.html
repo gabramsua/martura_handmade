@@ -1,10 +1,14 @@
 <section class="login-shell">
   <article class="login-panel">
     <a class="back-link" routerLink="/">Volver a la tienda</a>
-    <p class="eyebrow">Acceso mock</p>
+    <p class="eyebrow">Acceso {{ authMode }}</p>
     <h1>{{ requestedRole === 'admin' ? 'Acceso administrador' : 'Identificate para cerrar pedido' }}</h1>
     <p>
-      Este login simula Firebase Auth para poder validar el flujo del MVP antes de conectar proveedores reales.
+      @if (authMode === 'firebase') {
+        Este acceso ya esta preparado para Firebase Auth. Conecta tu configuracion y usa una cuenta de Google.
+      } @else {
+        Este login sigue en modo mock para validar el flujo del MVP antes de conectar proveedores reales.
+      }
     </p>
 
     @if (user$ | async; as user) {
@@ -31,8 +35,19 @@
           <option value="admin">Admin</option>
         </select>
       </label>
+
+      @if (errorMessage) {
+        <p class="login-error">{{ errorMessage }}</p>
+      }
+
       <button type="submit">
-        {{ requestedRole === 'admin' ? 'Entrar al dashboard' : 'Continuar al checkout' }}
+        @if (isSubmitting) {
+          Conectando...
+        } @else if (authMode === 'firebase') {
+          {{ requestedRole === 'admin' ? 'Entrar con Google' : 'Continuar con Google' }}
+        } @else {
+          {{ requestedRole === 'admin' ? 'Entrar al dashboard' : 'Continuar al checkout' }}
+        }
       </button>
     </form>
   </article>

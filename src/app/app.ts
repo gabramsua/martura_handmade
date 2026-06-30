@@ -23,7 +23,7 @@ export class App {
   readonly isCustomer$ = this.user$.pipe(map((user) => user?.role === 'customer'));
   readonly cartItems$ = this.cartService.totalItems$;
 
-  logout(): void {
-    this.authService.logout();
+  async logout(): Promise<void> {
+    await this.authService.logout();
   }
 }

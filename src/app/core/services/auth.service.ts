@@ -1,23 +1,70 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
+import {
+  Auth,
+  GoogleAuthProvider,
+  onAuthStateChanged,
+  signInWithPopup,
+  signOut,
+  updateProfile,
+} from '@angular/fire/auth';
 import { BehaviorSubject, map } from 'rxjs';
 
 import { AppUser, LoginCredentials } from '../models/user.model';
+import { environment } from '../../../environments/environment';
+import { LocalStorageService } from './local-storage.service';
 
 const STORAGE_KEY = 'martura_mock_user';
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
+  private readonly firebaseAuth = inject(Auth, { optional: true });
+  private readonly localStorageService = inject(LocalStorageService);
   private readonly userSubject = new BehaviorSubject<AppUser | null>(this.readStoredUser());
 
   readonly user$ = this.userSubject.asObservable();
   readonly isAuthenticated$ = this.user$.pipe(map((user) => user !== null));
   readonly isAdmin$ = this.user$.pipe(map((user) => user?.role === 'admin'));
+  readonly mode = environment.firebase.enabled ? 'firebase' : 'mock';
+
+  constructor() {
+    if (!environment.firebase.enabled || !this.firebaseAuth) {
+      return;
+    }
+
+    onAuthStateChanged(this.firebaseAuth, (firebaseUser) => {
+      if (!firebaseUser) {
+        this.userSubject.next(null);
+        return;
+      }
+
+      this.userSubject.next(this.mapFirebaseUser(firebaseUser));
+    });
+  }
 
   get currentUser(): AppUser | null {
     return this.userSubject.value;
   }
 
-  login(credentials: LoginCredentials): void {
+  async login(credentials: LoginCredentials): Promise<void> {
+    if (environment.firebase.enabled && this.firebaseAuth) {
+      const provider = new GoogleAuthProvider();
+      const { user } = await signInWithPopup(this.firebaseAuth, provider);
+
+      if (credentials.name && user.displayName !== credentials.name) {
+        await updateProfile(user, { displayName: credentials.name });
+      }
+
+      const appUser = this.mapFirebaseUser(user);
+
+      if (credentials.role === 'admin' && appUser.role !== 'admin') {
+        await signOut(this.firebaseAuth);
+        throw new Error('La cuenta usada no tiene rol de admin en la configuracion actual.');
+      }
+
+      this.userSubject.next(appUser);
+      return;
+    }
+
     const user: AppUser = {
       id: `mock-${credentials.role}-${this.slugify(credentials.email)}`,
       name: credentials.name,
@@ -25,28 +72,27 @@ export class AuthService {
       role: credentials.role,
     };
 
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
+    this.localStorageService.write(STORAGE_KEY, user);
     this.userSubject.next(user);
   }
 
-  logout(): void {
-    window.localStorage.removeItem(STORAGE_KEY);
+  async logout(): Promise<void> {
+    if (environment.firebase.enabled && this.firebaseAuth) {
+      await signOut(this.firebaseAuth);
+      this.userSubject.next(null);
+      return;
+    }
+
+    this.localStorageService.remove(STORAGE_KEY);
     this.userSubject.next(null);
   }
 
   private readStoredUser(): AppUser | null {
-    const storedValue = window.localStorage.getItem(STORAGE_KEY);
-
-    if (!storedValue) {
+    if (environment.firebase.enabled) {
       return null;
     }
 
-    try {
-      return JSON.parse(storedValue) as AppUser;
-    } catch {
-      window.localStorage.removeItem(STORAGE_KEY);
-      return null;
-    }
+    return this.localStorageService.read<AppUser | null>(STORAGE_KEY, null);
   }
 
   private slugify(value: string): string {
@@ -55,5 +101,24 @@ export class AuthService {
       .trim()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/(^-|-$)+/g, '');
+  }
+
+  private mapFirebaseUser(firebaseUser: {
+    uid: string;
+    displayName: string | null;
+    email: string | null;
+  }): AppUser {
+    const email = firebaseUser.email ?? '';
+    const normalizedEmail = email.toLowerCase();
+    const isAdmin = environment.firebase.adminEmails.some(
+      (adminEmail) => adminEmail.toLowerCase() === normalizedEmail,
+    );
+
+    return {
+      id: firebaseUser.uid,
+      name: firebaseUser.displayName || email || 'Usuario Martura',
+      email,
+      role: isAdmin ? 'admin' : 'customer',
+    };
   }
 }
