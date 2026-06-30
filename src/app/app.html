@@ -10,6 +10,11 @@
   <nav class="main-nav" aria-label="Navegacion principal">
     <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Tienda</a>
     <a routerLink="/admin" routerLinkActive="active">Dashboard</a>
+    @if (user$ | async; as user) {
+      <button type="button" class="session-button" (click)="logout()">{{ user.name }}</button>
+    } @else {
+      <a routerLink="/login" routerLinkActive="active">Login</a>
+    }
   </nav>
 
   <a class="cart-link" routerLink="/carrito" aria-label="Ver carrito">

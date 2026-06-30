@@ -1,0 +1,39 @@
+<section class="login-shell">
+  <article class="login-panel">
+    <a class="back-link" routerLink="/">Volver a la tienda</a>
+    <p class="eyebrow">Acceso mock</p>
+    <h1>{{ requestedRole === 'admin' ? 'Acceso administrador' : 'Identificate para cerrar pedido' }}</h1>
+    <p>
+      Este login simula Firebase Auth para poder validar el flujo del MVP antes de conectar proveedores reales.
+    </p>
+
+    @if (user$ | async; as user) {
+      <div class="current-user">
+        <strong>{{ user.name }}</strong>
+        <span>{{ user.email }} · {{ user.role }}</span>
+        <button type="button" (click)="logout()">Cerrar sesion</button>
+      </div>
+    }
+
+    <form [formGroup]="loginForm" (ngSubmit)="login()">
+      <label>
+        Nombre
+        <input type="text" formControlName="name" />
+      </label>
+      <label>
+        Email
+        <input type="email" formControlName="email" />
+      </label>
+      <label>
+        Rol
+        <select formControlName="role">
+          <option value="customer">Cliente</option>
+          <option value="admin">Admin</option>
+        </select>
+      </label>
+      <button type="submit">
+        {{ requestedRole === 'admin' ? 'Entrar al dashboard' : 'Continuar al checkout' }}
+      </button>
+    </form>
+  </article>
+</section>

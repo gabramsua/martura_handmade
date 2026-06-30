@@ -7,10 +7,10 @@ const SELLER_WHATSAPP = '34600000000';
 
 @Injectable({ providedIn: 'root' })
 export class CheckoutService {
-  buildOrder(summary: CartSummary, customer: CustomerContact): CheckoutOrder {
+  buildOrder(summary: CartSummary, customer: CustomerContact, userId: string): CheckoutOrder {
     return {
       id: `order-${Date.now()}`,
-      userId: 'mock-user',
+      userId,
       customer,
       items: summary.items.map(cartItemToOrderItem),
       subtotal: summary.subtotal,

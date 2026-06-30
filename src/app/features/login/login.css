@@ -1,0 +1,80 @@
+.login-shell {
+  display: grid;
+  min-height: calc(100vh - 156px);
+  place-items: center;
+  padding: clamp(32px, 6vw, 78px) clamp(18px, 5vw, 64px);
+}
+
+.login-panel {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  max-width: 560px;
+  padding: clamp(24px, 4vw, 38px);
+  width: 100%;
+}
+
+.back-link {
+  color: var(--sage);
+  display: inline-block;
+  font-weight: 800;
+  margin-bottom: 22px;
+}
+
+.login-panel h1 {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(2.2rem, 5vw, 4rem);
+  font-weight: 500;
+  line-height: 1;
+  margin: 0 0 14px;
+}
+
+.login-panel p {
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.current-user {
+  background: var(--paper);
+  border-radius: 8px;
+  display: grid;
+  gap: 6px;
+  margin: 20px 0;
+  padding: 14px;
+}
+
+.current-user span {
+  color: var(--muted);
+}
+
+.current-user button,
+.login-panel form button {
+  background: var(--ink);
+  color: #fff;
+  font-weight: 800;
+  padding: 0 16px;
+  width: fit-content;
+}
+
+.login-panel form {
+  display: grid;
+  gap: 14px;
+  margin-top: 22px;
+}
+
+.login-panel label {
+  color: var(--muted);
+  display: grid;
+  font-weight: 800;
+  gap: 8px;
+}
+
+.login-panel input,
+.login-panel select {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--ink);
+  min-height: 44px;
+  padding: 10px 12px;
+}

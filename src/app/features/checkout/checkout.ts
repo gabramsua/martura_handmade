@@ -6,6 +6,7 @@ import { map } from 'rxjs';
 
 import { CartSummary } from '../../core/models/cart.model';
 import { CheckoutOrder } from '../../core/models/order.model';
+import { AuthService } from '../../core/services/auth.service';
 import { CartService } from '../../core/services/cart.service';
 import { CheckoutService } from '../../core/services/checkout.service';
 import { OrdersService } from '../../core/services/orders.service';
@@ -19,6 +20,7 @@ import { OrdersService } from '../../core/services/orders.service';
 })
 export class Checkout {
   private readonly formBuilder = inject(FormBuilder);
+  private readonly authService = inject(AuthService);
   private readonly cartService = inject(CartService);
   private readonly checkoutService = inject(CheckoutService);
   private readonly ordersService = inject(OrdersService);
@@ -36,16 +38,31 @@ export class Checkout {
   lastOrder: CheckoutOrder | null = null;
   whatsappUrl: string | null = null;
 
+  constructor() {
+    const user = this.authService.currentUser;
+
+    if (user) {
+      this.checkoutForm.patchValue({
+        name: user.name,
+        email: user.email,
+      });
+    }
+  }
+
   prepareOrder(summary: CartSummary): void {
     if (this.checkoutForm.invalid) {
       this.checkoutForm.markAllAsTouched();
       return;
     }
 
-    const order = this.checkoutService.buildOrder(summary, {
-      ...this.checkoutForm.getRawValue(),
-      notes: this.checkoutForm.controls.notes.value || null,
-    });
+    const order = this.checkoutService.buildOrder(
+      summary,
+      {
+        ...this.checkoutForm.getRawValue(),
+        notes: this.checkoutForm.controls.notes.value || null,
+      },
+      this.authService.currentUser?.id ?? 'mock-user',
+    );
 
     this.lastOrder = order;
     this.whatsappUrl = this.checkoutService.buildWhatsappUrl(order);
