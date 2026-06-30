@@ -10,7 +10,7 @@
       <p class="eyebrow">Pedido preparado</p>
       <h2>Tu pedido ya esta registrado</h2>
       <p>
-        Hemos guardado el pedido en la sesion actual, descontado stock y dejado el mensaje listo para enviarlo.
+        Hemos guardado el pedido, descontado stock y dejado el mensaje listo para que la clienta lo envie por WhatsApp.
       </p>
 
       <div class="confirmation-card">
@@ -21,6 +21,14 @@
         <div class="confirmation-meta">
           <span>Total</span>
           <strong>{{ lastOrder.total | currency: 'EUR' }}</strong>
+        </div>
+        <div class="confirmation-meta">
+          <span>Entrega</span>
+          <strong>{{ getDeliveryLabel(lastOrder.customer.deliveryMethod) }}</strong>
+        </div>
+        <div class="confirmation-meta">
+          <span>Destino</span>
+          <strong>{{ lastOrder.customer.postalCode }} {{ lastOrder.customer.city }}</strong>
         </div>
       </div>
 
@@ -50,6 +58,10 @@
     @if (summary.items.length > 0) {
       <div class="checkout-layout">
         <form class="checkout-form" [formGroup]="checkoutForm" (ngSubmit)="prepareOrder(summary)">
+          <div class="form-section wide">
+            <p class="section-kicker">Contacto</p>
+          </div>
+
           <label>
             Nombre
             <input type="text" formControlName="name" autocomplete="name" />
@@ -63,12 +75,49 @@
             <input type="tel" formControlName="phone" autocomplete="tel" />
           </label>
           <label>
+            Entrega
+            <select formControlName="deliveryMethod">
+              <option value="shipping">Envio</option>
+              <option value="pickup">Recogida</option>
+            </select>
+          </label>
+
+          <div class="form-section wide">
+            <p class="section-kicker">Direccion</p>
+          </div>
+
+          @if (isShipping) {
+            <label class="wide">
+              Direccion
+              <input type="text" formControlName="addressLine1" autocomplete="address-line1" />
+            </label>
+          }
+
+          <label>
+            Codigo postal
+            <input type="text" formControlName="postalCode" inputmode="numeric" autocomplete="postal-code" />
+          </label>
+          <label>
             Ciudad
             <input type="text" formControlName="city" autocomplete="address-level2" />
           </label>
+          <label>
+            Provincia
+            <input type="text" formControlName="province" autocomplete="address-level1" />
+          </label>
+
+          @if (addressErrorMessage) {
+            <p class="form-error">{{ addressErrorMessage }}</p>
+          }
+
           <label class="wide">
             Notas para el pedido
             <textarea rows="4" formControlName="notes"></textarea>
+          </label>
+
+          <label class="checkbox-row wide">
+            <input type="checkbox" formControlName="acceptsPolicies" />
+            Confirmo que estos datos se usaran solo para gestionar el pedido.
           </label>
 
           @if (errorMessage) {
@@ -82,10 +131,14 @@
 
         <aside class="order-preview">
           <h2>Pedido</h2>
+          <div class="preview-block">
+            <span>Entrega</span>
+            <strong>{{ getDeliveryLabel(checkoutForm.controls.deliveryMethod.value) }}</strong>
+          </div>
           @for (item of summary.items; track item.product.id + item.variant) {
             <div class="preview-item">
               <span>{{ item.quantity }} x {{ item.product.name }}</span>
-              <strong>{{ ((item.product.offerPrice ?? item.product.originalPrice) * item.quantity) | currency: 'EUR' }}</strong>
+              <strong>{{ getLineTotal(item) | currency: 'EUR' }}</strong>
             </div>
           }
           <div class="preview-total">

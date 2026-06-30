@@ -3,6 +3,7 @@ import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { switchMap } from 'rxjs';
 
+import { CheckoutOrder, getOrderStatusLabel } from '../../core/models/order.model';
 import { AuthService } from '../../core/services/auth.service';
 import { OrdersService } from '../../core/services/orders.service';
 
@@ -20,4 +21,19 @@ export class Orders {
   readonly orders$ = this.authService.user$.pipe(
     switchMap((user) => this.ordersService.getOrdersForUser(user?.id ?? null)),
   );
+
+  getOrderStatus(order: CheckoutOrder): string {
+    return getOrderStatusLabel(order.status, order.customer.deliveryMethod);
+  }
+
+  getDestination(order: CheckoutOrder): string {
+    if (order.customer.deliveryMethod === 'pickup') {
+      return 'Recogida en taller';
+    }
+
+    const parts = [order.customer.addressLine1, `${order.customer.postalCode} ${order.customer.city}`]
+      .filter(Boolean);
+
+    return parts.join(' - ');
+  }
 }

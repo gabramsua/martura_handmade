@@ -1,12 +1,20 @@
 import { AsyncPipe, CurrencyPipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
-import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import {
+  AbstractControl,
+  FormBuilder,
+  ReactiveFormsModule,
+  ValidationErrors,
+  Validators,
+} from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { map } from 'rxjs';
 
-import { CartSummary } from '../../core/models/cart.model';
+import { CartItem, CartSummary } from '../../core/models/cart.model';
 import { CheckoutOrder } from '../../core/models/order.model';
+import { resolveProductPricing } from '../../core/utils/product-pricing';
 import { AuthService } from '../../core/services/auth.service';
+import { CampaignsService } from '../../core/services/campaigns.service';
 import { CartService } from '../../core/services/cart.service';
 import { CheckoutService } from '../../core/services/checkout.service';
 import { OrderPlacementService } from '../../core/services/order-placement.service';
@@ -21,6 +29,7 @@ import { OrderPlacementService } from '../../core/services/order-placement.servi
 export class Checkout {
   private readonly formBuilder = inject(FormBuilder);
   private readonly authService = inject(AuthService);
+  private readonly campaignsService = inject(CampaignsService);
   private readonly cartService = inject(CartService);
   private readonly checkoutService = inject(CheckoutService);
   private readonly orderPlacementService = inject(OrderPlacementService);
@@ -30,9 +39,16 @@ export class Checkout {
   readonly checkoutForm = this.formBuilder.nonNullable.group({
     name: ['', [Validators.required, Validators.minLength(2)]],
     email: ['', [Validators.required, Validators.email]],
-    phone: ['', [Validators.required, Validators.minLength(9)]],
+    phone: ['', [Validators.required, Validators.pattern(/^[0-9+\s]{9,15}$/)]],
+    deliveryMethod: ['shipping' as const, [Validators.required]],
+    addressLine1: [''],
+    postalCode: ['', [Validators.required, Validators.pattern(/^\d{5}$/)]],
     city: ['', [Validators.required]],
+    province: ['', [Validators.required]],
     notes: [''],
+    acceptsPolicies: [false, [Validators.requiredTrue]],
+  }, {
+    validators: [this.shippingAddressValidator],
   });
 
   lastOrder: CheckoutOrder | null = null;
@@ -59,12 +75,22 @@ export class Checkout {
 
     try {
       this.isSubmitting = true;
+      const value = this.checkoutForm.getRawValue();
 
       const order = await this.orderPlacementService.placeOrder(
         summary,
         {
-          ...this.checkoutForm.getRawValue(),
-          notes: this.checkoutForm.controls.notes.value || null,
+          name: value.name,
+          email: value.email,
+          phone: value.phone,
+          deliveryMethod: value.deliveryMethod,
+          addressLine1: value.deliveryMethod === 'shipping'
+            ? value.addressLine1
+            : null,
+          postalCode: value.postalCode,
+          city: value.city,
+          province: value.province,
+          notes: value.notes || null,
         },
         this.authService.currentUser?.id ?? 'mock-user',
       );
@@ -78,5 +104,37 @@ export class Checkout {
     } finally {
       this.isSubmitting = false;
     }
+  }
+
+  getLineTotal(item: CartItem): number {
+    return (
+      resolveProductPricing(item.product, this.campaignsService.activeCampaignsSnapshot).effectivePrice *
+      item.quantity
+    );
+  }
+
+  get isShipping(): boolean {
+    return this.checkoutForm.controls.deliveryMethod.value === 'shipping';
+  }
+
+  get addressErrorMessage(): string | null {
+    return this.checkoutForm.errors?.['missingAddress']
+      ? 'La direccion es obligatoria cuando el pedido va con envio.'
+      : null;
+  }
+
+  getDeliveryLabel(method: 'shipping' | 'pickup'): string {
+    return method === 'shipping' ? 'Envio' : 'Recogida';
+  }
+
+  private shippingAddressValidator(control: AbstractControl): ValidationErrors | null {
+    const deliveryMethod = control.get('deliveryMethod')?.value as 'shipping' | 'pickup' | undefined;
+    const addressLine1 = String(control.get('addressLine1')?.value ?? '').trim();
+
+    if (deliveryMethod === 'shipping' && !addressLine1) {
+      return { missingAddress: true };
+    }
+
+    return null;
   }
 }

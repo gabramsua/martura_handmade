@@ -56,6 +56,23 @@
   line-height: 1.7;
 }
 
+.status-pill {
+  background: #edf6ef;
+  border-radius: 999px;
+  color: #256142;
+  display: inline-flex;
+  font-size: 0.78rem;
+  font-weight: 900;
+  margin: 0 0 18px;
+  padding: 7px 11px;
+  text-transform: uppercase;
+}
+
+.status-pill.sold-out {
+  background: var(--paper);
+  color: var(--rose-dark);
+}
+
 .price-row {
   align-items: baseline;
   display: flex;
@@ -70,6 +87,13 @@
 .price-row span {
   color: var(--muted);
   text-decoration: line-through;
+}
+
+.campaign-note {
+  color: var(--rose-dark);
+  font-size: 0.92rem;
+  font-weight: 700;
+  margin: -14px 0 24px;
 }
 
 .variant-panel {
@@ -95,6 +119,12 @@
   color: #fff;
   font-weight: 800;
   padding: 0 16px;
+}
+
+.variant-list button:disabled {
+  background: var(--line);
+  color: var(--muted);
+  cursor: not-allowed;
 }
 
 .detail-meta {

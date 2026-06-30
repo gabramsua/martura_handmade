@@ -18,6 +18,8 @@ export const environment = {
       authPort: 9099,
       firestoreHost: '127.0.0.1',
       firestorePort: 8080,
+      storageHost: '127.0.0.1',
+      storagePort: 9199,
     },
   },
 } as const;

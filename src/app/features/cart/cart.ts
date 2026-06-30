@@ -2,6 +2,9 @@ import { AsyncPipe, CurrencyPipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
+import { CartItem } from '../../core/models/cart.model';
+import { resolveProductPricing } from '../../core/utils/product-pricing';
+import { CampaignsService } from '../../core/services/campaigns.service';
 import { CartService } from '../../core/services/cart.service';
 
 @Component({
@@ -12,6 +15,7 @@ import { CartService } from '../../core/services/cart.service';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class Cart {
+  private readonly campaignsService = inject(CampaignsService);
   private readonly cartService = inject(CartService);
 
   readonly summary$ = this.cartService.summary$;
@@ -22,5 +26,16 @@ export class Cart {
 
   removeItem(productId: string, variant: string): void {
     this.cartService.removeItem(productId, variant);
+  }
+
+  getLineTotal(item: CartItem): number {
+    return (
+      resolveProductPricing(item.product, this.campaignsService.activeCampaignsSnapshot).effectivePrice *
+      item.quantity
+    );
+  }
+
+  getUnitPrice(item: CartItem): number {
+    return resolveProductPricing(item.product, this.campaignsService.activeCampaignsSnapshot).effectivePrice;
   }
 }

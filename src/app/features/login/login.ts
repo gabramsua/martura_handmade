@@ -21,6 +21,7 @@ export class Login {
   private readonly router = inject(Router);
 
   readonly authMode = this.authService.mode;
+  readonly isFirebaseMode = this.authMode === 'firebase';
   readonly user$ = this.authService.user$;
   readonly requestedRole = (this.route.snapshot.queryParamMap.get('role') as UserRole | null) ?? 'customer';
   readonly returnUrl = this.route.snapshot.queryParamMap.get('returnUrl') ?? '/';
@@ -37,7 +38,7 @@ export class Login {
   isSubmitting = false;
 
   async login(): Promise<void> {
-    if (this.loginForm.invalid) {
+    if (!this.isFirebaseMode && this.loginForm.invalid) {
       this.loginForm.markAllAsTouched();
       return;
     }
@@ -45,7 +46,15 @@ export class Login {
     try {
       this.isSubmitting = true;
       this.errorMessage = null;
-      await this.authService.login(this.loginForm.getRawValue());
+      await this.authService.login(
+        this.isFirebaseMode
+          ? {
+              name: this.requestedRole === 'admin' ? 'Martura Admin' : 'Cliente Martura',
+              email: this.requestedRole === 'admin' ? this.adminEmail : '',
+              role: this.requestedRole,
+            }
+          : this.loginForm.getRawValue(),
+      );
       await this.router.navigateByUrl(this.returnUrl);
     } catch (error) {
       this.errorMessage = error instanceof Error ? error.message : 'No se pudo iniciar sesion.';
@@ -56,5 +65,31 @@ export class Login {
 
   async logout(): Promise<void> {
     await this.authService.logout();
+  }
+
+  get title(): string {
+    return this.requestedRole === 'admin' ? 'Acceso administrador' : 'Identificate para cerrar pedido';
+  }
+
+  get description(): string {
+    if (this.isFirebaseMode) {
+      return this.requestedRole === 'admin'
+        ? 'Entra con Google usando el correo autorizado para gestionar catalogo, stock y pedidos.'
+        : 'Entra con Google para asociar el pedido a tu cuenta y poder consultar su estado despues.';
+    }
+
+    return 'Este login sigue en modo mock para validar el flujo del MVP antes de conectar proveedores reales.';
+  }
+
+  get submitLabel(): string {
+    if (this.isSubmitting) {
+      return 'Conectando...';
+    }
+
+    if (this.isFirebaseMode) {
+      return this.requestedRole === 'admin' ? 'Entrar con Google' : 'Continuar con Google';
+    }
+
+    return this.requestedRole === 'admin' ? 'Entrar al dashboard' : 'Continuar al checkout';
   }
 }

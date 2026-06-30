@@ -59,22 +59,33 @@ export class AuthService {
 
   async login(credentials: LoginCredentials): Promise<void> {
     if (isFirebaseConfigured && this.firebaseAuth) {
-      const provider = new GoogleAuthProvider();
-      const { user } = await signInWithPopup(this.firebaseAuth, provider);
+      try {
+        const provider = new GoogleAuthProvider();
+        provider.setCustomParameters({
+          prompt: 'select_account',
+          ...(credentials.role === 'admin' && credentials.email
+            ? { login_hint: credentials.email }
+            : {}),
+        });
 
-      if (credentials.name && user.displayName !== credentials.name) {
-        await updateProfile(user, { displayName: credentials.name });
+        const { user } = await signInWithPopup(this.firebaseAuth, provider);
+
+        if (credentials.name && user.displayName !== credentials.name) {
+          await updateProfile(user, { displayName: credentials.name });
+        }
+
+        const appUser = this.mapFirebaseUser(user);
+
+        if (credentials.role === 'admin' && appUser.role !== 'admin') {
+          await signOut(this.firebaseAuth);
+          throw new Error('Ese correo no tiene acceso al dashboard de Martura.');
+        }
+
+        this.userSubject.next(appUser);
+        return;
+      } catch (error) {
+        throw this.mapAuthError(error);
       }
-
-      const appUser = this.mapFirebaseUser(user);
-
-      if (credentials.role === 'admin' && appUser.role !== 'admin') {
-        await signOut(this.firebaseAuth);
-        throw new Error('La cuenta usada no tiene rol de admin en la configuracion actual.');
-      }
-
-      this.userSubject.next(appUser);
-      return;
     }
 
     const user: AppUser = {
@@ -137,5 +148,31 @@ export class AuthService {
 
     this.readyResolved = true;
     this.resolveReady();
+  }
+
+  private mapAuthError(error: unknown): Error {
+    if (error instanceof Error && error.message === 'Ese correo no tiene acceso al dashboard de Martura.') {
+      return error;
+    }
+
+    const code =
+      typeof error === 'object' && error && 'code' in error ? String(error.code) : null;
+
+    switch (code) {
+      case 'auth/popup-blocked':
+        return new Error('El navegador ha bloqueado la ventana de acceso. Permite popups e intentalo de nuevo.');
+      case 'auth/popup-closed-by-user':
+        return new Error('Has cerrado la ventana de Google antes de completar el acceso.');
+      case 'auth/cancelled-popup-request':
+        return new Error('Ya habia un intento de acceso en curso. Espera un segundo y vuelve a intentarlo.');
+      case 'auth/unauthorized-domain':
+        return new Error(
+          'Este dominio aun no esta autorizado en Firebase Auth. Revisa Authentication > Settings > Authorized domains.',
+        );
+      case 'auth/account-exists-with-different-credential':
+        return new Error('Ese correo ya existe con otro metodo de acceso en Google.');
+      default:
+        return new Error('No se pudo iniciar sesion con Google. Revisa Firebase Auth y vuelve a intentarlo.');
+    }
   }
 }

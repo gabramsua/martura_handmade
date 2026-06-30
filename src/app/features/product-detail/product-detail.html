@@ -11,24 +11,29 @@
 
     <article class="detail-info">
       <a class="back-link" routerLink="/">Volver al catalogo</a>
-      <p class="eyebrow">{{ product.category }}</p>
+      <p class="eyebrow">{{ getTaxonomyLabel(product) }}</p>
       <h1>{{ product.name }}</h1>
+      <p class="status-pill" [class.sold-out]="!isAvailable(product)">{{ getStatusLabel(product) }}</p>
       <p class="description">{{ product.description }}</p>
       <p class="story">{{ product.story }}</p>
 
       <div class="price-row">
-        <strong>{{ (product.offerPrice ?? product.originalPrice) | currency: 'EUR' : 'symbol' : '1.0-0' : 'es' }}</strong>
-        @if (product.offerPrice !== null) {
-          <span>{{ product.originalPrice | currency: 'EUR' : 'symbol' : '1.0-0' : 'es' }}</span>
+        <strong>{{ getCurrentPrice(product) | currency: 'EUR' : 'symbol' : '1.0-0' : 'es' }}</strong>
+        @if (getComparePrice(product); as comparePrice) {
+          <span>{{ comparePrice | currency: 'EUR' : 'symbol' : '1.0-0' : 'es' }}</span>
         }
       </div>
+
+      @if (getCampaignLabel(product); as campaignLabel) {
+        <p class="campaign-note">{{ campaignLabel }}</p>
+      }
 
       <div class="variant-panel">
         <p>Tamano o variante</p>
         <div class="variant-list">
           @for (size of product.sizes; track size) {
-            <button type="button" (click)="addToCart(product, size)">
-              Anadir {{ size }}
+            <button type="button" [disabled]="!isAvailable(product)" (click)="addToCart(product, size)">
+              {{ isAvailable(product) ? 'Anadir ' + size : 'Sin stock' }}
             </button>
           }
         </div>
@@ -37,11 +42,15 @@
       <dl class="detail-meta">
         <div>
           <dt>Stock</dt>
-          <dd>{{ product.stock }} disponibles</dd>
+          <dd>{{ isAvailable(product) ? product.stock + ' disponibles' : 'Sin stock ahora mismo' }}</dd>
         </div>
         <div>
           <dt>Colores</dt>
           <dd>{{ product.colors.join(', ') }}</dd>
+        </div>
+        <div>
+          <dt>Coleccion</dt>
+          <dd>{{ product.collection || 'Permanente' }}</dd>
         </div>
         <div>
           <dt>Envio</dt>

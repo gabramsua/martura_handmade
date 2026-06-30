@@ -16,11 +16,15 @@ export const MOCK_PRODUCTS: Product[] = [
     ],
     category: 'Bolsos',
     categorySlug: 'bolsos',
+    collection: 'Invitada',
+    collectionSlug: 'invitada',
     stock: 4,
     sizes: ['Unica'],
     colors: ['Arena', 'Flor cereza'],
+    pricingMode: 'regular',
     campaignId: null,
     featured: true,
+    status: 'active',
     createdAt: new Date('2026-06-01'),
   },
   {
@@ -30,7 +34,7 @@ export const MOCK_PRODUCTS: Product[] = [
     description: 'Neceser acolchado con forro lavable, pensado para bolso diario o viaje.',
     story: 'Compacto por fuera, generoso por dentro. El tipo de pieza que termina yendo a todas partes.',
     originalPrice: 32,
-    offerPrice: 27,
+    offerPrice: null,
     imageUrl: 'https://images.unsplash.com/photo-1584917865442-de89df76afd3?auto=format&fit=crop&w=900&q=80',
     gallery: [
       'https://images.unsplash.com/photo-1584917865442-de89df76afd3?auto=format&fit=crop&w=900&q=80',
@@ -38,11 +42,15 @@ export const MOCK_PRODUCTS: Product[] = [
     ],
     category: 'Neceseres',
     categorySlug: 'neceseres',
+    collection: 'Verano',
+    collectionSlug: 'verano',
     stock: 8,
     sizes: ['S', 'M'],
     colors: ['Verde salvia', 'Crudo'],
+    pricingMode: 'campaign',
     campaignId: 'cmp-verano-2026',
     featured: true,
+    status: 'active',
     createdAt: new Date('2026-06-03'),
   },
   {
@@ -60,11 +68,15 @@ export const MOCK_PRODUCTS: Product[] = [
     ],
     category: 'Bolsos',
     categorySlug: 'bolsos',
+    collection: 'Diario',
+    collectionSlug: 'diario',
     stock: 3,
     sizes: ['Unica'],
     colors: ['Azul tinta', 'Rayas'],
+    pricingMode: 'regular',
     campaignId: null,
     featured: true,
+    status: 'active',
     createdAt: new Date('2026-06-06'),
   },
   {
@@ -82,11 +94,15 @@ export const MOCK_PRODUCTS: Product[] = [
     ],
     category: 'Fundas',
     categorySlug: 'fundas',
+    collection: 'Organizacion',
+    collectionSlug: 'organizacion',
     stock: 6,
     sizes: ['Tablet', 'E-reader'],
     colors: ['Malva', 'Natural'],
+    pricingMode: 'regular',
     campaignId: null,
     featured: false,
+    status: 'active',
     createdAt: new Date('2026-06-08'),
   },
   {
@@ -104,11 +120,15 @@ export const MOCK_PRODUCTS: Product[] = [
     ],
     category: 'Accesorios',
     categorySlug: 'accesorios',
+    collection: 'Verano',
+    collectionSlug: 'verano',
     stock: 12,
     sizes: ['Ajustable'],
     colors: ['Mostaza', 'Negro'],
-    campaignId: 'cmp-verano-2026',
+    pricingMode: 'individual_offer',
+    campaignId: null,
     featured: false,
+    status: 'active',
     createdAt: new Date('2026-06-10'),
   },
   {
@@ -126,15 +146,27 @@ export const MOCK_PRODUCTS: Product[] = [
     ],
     category: 'Bolsos',
     categorySlug: 'bolsos',
+    collection: 'Invitada',
+    collectionSlug: 'invitada',
     stock: 5,
     sizes: ['Unica'],
     colors: ['Negro', 'Terracota'],
+    pricingMode: 'regular',
     campaignId: null,
     featured: false,
+    status: 'active',
     createdAt: new Date('2026-06-12'),
   },
 ];
 
 export const PRODUCT_CATEGORIES = Array.from(
   new Map(MOCK_PRODUCTS.map((product) => [product.categorySlug, product.category])).entries(),
+).map(([slug, name]) => ({ slug, name }));
+
+export const PRODUCT_COLLECTIONS = Array.from(
+  new Map(
+    MOCK_PRODUCTS
+      .filter((product) => !!product.collectionSlug && !!product.collection)
+      .map((product) => [product.collectionSlug, product.collection]),
+  ).entries(),
 ).map(([slug, name]) => ({ slug, name }));

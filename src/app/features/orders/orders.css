@@ -33,6 +33,20 @@
   gap: 10px;
 }
 
+.order-notes {
+  background: var(--paper);
+  border-radius: 8px;
+  display: grid;
+  gap: 6px;
+  margin: 0 0 18px;
+  padding: 12px;
+}
+
+.order-notes span {
+  color: var(--muted);
+  display: block;
+}
+
 .line-item {
   align-items: center;
   background: var(--paper);
@@ -54,6 +68,10 @@
   font-family: Georgia, "Times New Roman", serif;
   font-weight: 500;
   margin-top: 0;
+}
+
+.empty-orders p {
+  color: var(--muted);
 }
 
 @media (max-width: 860px) {

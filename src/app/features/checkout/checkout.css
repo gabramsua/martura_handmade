@@ -37,6 +37,7 @@
 }
 
 .checkout-form input,
+.checkout-form select,
 .checkout-form textarea {
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -49,6 +50,31 @@
 .checkout-form button {
   grid-column: 1 / -1;
   width: fit-content;
+}
+
+.form-section {
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+.section-kicker {
+  color: var(--rose-dark);
+  font-size: 0.82rem;
+  font-weight: 900;
+  letter-spacing: 0;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.checkbox-row {
+  align-items: center;
+  display: flex !important;
+  flex-direction: row;
+  gap: 10px;
+}
+
+.checkbox-row input {
+  min-height: 0;
 }
 
 .form-error {
@@ -69,6 +95,7 @@
 }
 
 .preview-item,
+.preview-block,
 .preview-total {
   display: flex;
   gap: 16px;
@@ -76,7 +103,8 @@
   padding: 12px 0;
 }
 
-.preview-item {
+.preview-item,
+.preview-block {
   border-bottom: 1px solid var(--line);
 }
 

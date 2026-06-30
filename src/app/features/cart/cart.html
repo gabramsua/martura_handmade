@@ -15,6 +15,7 @@
                 <p>{{ item.product.category }}</p>
                 <h2>{{ item.product.name }}</h2>
                 <span>{{ item.variant }}</span>
+                <small>{{ getUnitPrice(item) | currency: 'EUR' }} por unidad</small>
                 <div class="quantity-row">
                   <button type="button" (click)="updateQuantity(item.product.id, item.variant, item.quantity - 1)">-</button>
                   <strong>{{ item.quantity }}</strong>
@@ -22,7 +23,7 @@
                 </div>
               </div>
               <strong>
-                {{ ((item.product.offerPrice ?? item.product.originalPrice) * item.quantity) | currency: 'EUR' }}
+                {{ getLineTotal(item) | currency: 'EUR' }}
               </strong>
               <button class="remove-button" type="button" (click)="removeItem(item.product.id, item.variant)">
                 Quitar

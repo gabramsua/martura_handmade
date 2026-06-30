@@ -2,7 +2,7 @@
   <div class="section-heading">
     <p class="eyebrow">Zona cliente</p>
     <h1>Mis pedidos</h1>
-    <p>Seguimiento simple del pedido dentro del MVP antes de pasar a Firebase y estados reales.</p>
+    <p>Resumen de los pedidos guardados con su entrega, fecha y lineas principales.</p>
   </div>
 
   <div class="orders-listing">
@@ -15,7 +15,7 @@
           </div>
           <div>
             <span>Estado</span>
-            <strong>{{ order.status === 'sent' ? 'Enviado' : 'Pendiente de envio' }}</strong>
+            <strong>{{ getOrderStatus(order) }}</strong>
           </div>
           <div>
             <span>Fecha</span>
@@ -26,6 +26,32 @@
             <strong>{{ order.total | currency: 'EUR' }}</strong>
           </div>
         </div>
+
+        <div class="order-head">
+          <div>
+            <span>Entrega</span>
+            <strong>{{ order.customer.deliveryMethod === 'shipping' ? 'Envio' : 'Recogida' }}</strong>
+          </div>
+          <div>
+            <span>Destino</span>
+            <strong>{{ getDestination(order) }}</strong>
+          </div>
+          <div>
+            <span>Actualizado</span>
+            <strong>{{ order.updatedAt | date: 'dd/MM/yyyy HH:mm' }}</strong>
+          </div>
+          <div>
+            <span>Telefono</span>
+            <strong>{{ order.customer.phone }}</strong>
+          </div>
+        </div>
+
+        @if (order.customer.notes) {
+          <p class="order-notes">
+            <span>Notas</span>
+            <strong>{{ order.customer.notes }}</strong>
+          </p>
+        }
 
         <div class="order-lines">
           @for (item of order.items; track item.productId + item.variant) {
@@ -43,6 +69,7 @@
     } @empty {
       <div class="empty-orders">
         <h2>Todavia no hay pedidos en tu cuenta.</h2>
+        <p>Cuando cierres tu primera compra, la veras aqui con su estado y datos de entrega.</p>
         <a class="button primary" routerLink="/">Ir a la tienda</a>
       </div>
     }

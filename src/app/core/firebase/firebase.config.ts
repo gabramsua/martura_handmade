@@ -12,6 +12,7 @@ export const isFirebaseConfigured =
 export const authMode = isFirebaseConfigured ? 'firebase' : 'mock';
 
 export const firestoreCollections = {
+  campaigns: 'campaigns',
   orders: 'orders',
   products: 'products',
 } as const;

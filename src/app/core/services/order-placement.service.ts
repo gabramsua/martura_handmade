@@ -6,6 +6,7 @@ import {
 } from '@angular/fire/firestore';
 
 import { CartSummary } from '../models/cart.model';
+import { isProductVisible, normalizeProductStatus, ProductStatus } from '../models/product.model';
 import { CheckoutOrder, CustomerContact } from '../models/order.model';
 import { firestoreCollections, isFirebaseConfigured } from '../firebase/firebase.config';
 import { CheckoutService } from './checkout.service';
@@ -38,7 +39,7 @@ export class OrderPlacementService {
     }
 
     await this.ordersService.saveDraft(order);
-    await this.productsService.applyOrder(order.items);
+    await this.productsService.reserveOrder(order.items);
 
     return order;
   }
@@ -57,15 +58,24 @@ export class OrderPlacementService {
 
         const product = productSnapshot.data() as {
           stock?: number;
+          status?: ProductStatus;
         };
         const currentStock = typeof product.stock === 'number' ? product.stock : 0;
+        const currentStatus = normalizeProductStatus(product.status, currentStock);
+
+        if (!isProductVisible({ status: currentStatus })) {
+          throw new Error(`La pieza "${item.productName}" ya no esta disponible.`);
+        }
 
         if (currentStock < item.quantity) {
           throw new Error(`Solo quedan ${currentStock} unidades de "${item.productName}".`);
         }
 
+        const nextStock = currentStock - item.quantity;
+
         transaction.update(productDoc, {
-          stock: currentStock - item.quantity,
+          stock: nextStock,
+          status: normalizeProductStatus(currentStatus, nextStock),
         });
       }
 

@@ -49,18 +49,35 @@
 }
 
 .current-user button,
+.provider-button,
 .login-panel form button {
   background: var(--ink);
   color: #fff;
   font-weight: 800;
+  justify-content: center;
+  min-height: 46px;
   padding: 0 16px;
   width: fit-content;
 }
 
+.current-user button:disabled,
+.provider-button:disabled,
+.login-panel form button:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+.provider-panel,
 .login-panel form {
   display: grid;
   gap: 14px;
   margin-top: 22px;
+}
+
+.provider-panel {
+  background: var(--paper);
+  border-radius: 8px;
+  padding: 18px;
 }
 
 .login-panel label {
@@ -94,4 +111,15 @@
   font-weight: 700;
   margin: 0 0 14px;
   padding: 10px 12px;
+}
+
+.provider-title {
+  color: var(--ink);
+  font-size: 1.05rem;
+  font-weight: 800;
+  margin: 0 0 6px;
+}
+
+.provider-copy {
+  margin: 0;
 }

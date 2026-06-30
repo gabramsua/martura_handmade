@@ -6,9 +6,23 @@
     </div>
     <div class="heading-actions">
       <button type="button" (click)="resetForm()">Nuevo producto</button>
-      <button type="button" class="secondary-button" (click)="resetProducts()">Reset catalogo</button>
+      <button
+        type="button"
+        class="secondary-button"
+        [disabled]="isResettingProducts()"
+        (click)="resetProducts()">
+        {{ isResettingProducts() ? 'Restaurando...' : 'Restaurar demo' }}
+      </button>
     </div>
   </div>
+
+  @if (feedbackMessage(); as message) {
+    <p class="feedback-banner success">{{ message }}</p>
+  }
+
+  @if (errorMessage(); as message) {
+    <p class="feedback-banner error">{{ message }}</p>
+  }
 
   @if (stats$ | async; as stats) {
     <div class="stats-grid">
@@ -21,10 +35,18 @@
         <strong>{{ stats.lowStock }}</strong>
       </article>
       <article>
+        <span>Agotados</span>
+        <strong>{{ stats.soldOut }}</strong>
+      </article>
+      <article>
+        <span>Ocultos</span>
+        <strong>{{ stats.hidden }}</strong>
+      </article>
+      <article>
         <span>Valor inventario</span>
         <strong>{{ stats.inventoryValue | currency: 'EUR' : 'symbol' : '1.0-0' }}</strong>
       </article>
-      <article>
+      <article class="wide-stat">
         <span>Pedidos pendientes</span>
         <strong>{{ stats.pendingOrders }}</strong>
       </article>
@@ -35,63 +57,146 @@
     <section class="admin-panel">
       <div class="panel-title">
         <h2>{{ editingProductId() ? 'Editar producto' : 'Nuevo producto' }}</h2>
-        <span>CRUD mock</span>
+        <span>{{ modeLabel }}</span>
       </div>
+
+      @if (loading$ | async) {
+        <p class="muted">Cargando catalogo desde Firestore...</p>
+      }
 
       <form class="product-form" [formGroup]="productForm" (ngSubmit)="saveProduct()">
         <label>
           Nombre
           <input type="text" formControlName="name" />
+          @if (productForm.controls.name.invalid && productForm.controls.name.touched) {
+            <small class="field-error">Escribe un nombre de al menos 2 caracteres.</small>
+          }
         </label>
+
         <label>
           Categoria
           <input type="text" formControlName="category" />
+          @if (productForm.controls.category.invalid && productForm.controls.category.touched) {
+            <small class="field-error">La categoria es obligatoria.</small>
+          }
         </label>
+
+        <label>
+          Coleccion
+          <input type="text" formControlName="collection" list="collection-options" />
+        </label>
+
         <label class="wide">
           Descripcion corta
           <textarea rows="3" formControlName="description"></textarea>
+          @if (productForm.controls.description.invalid && productForm.controls.description.touched) {
+            <small class="field-error">Necesitamos una descripcion corta para el catalogo.</small>
+          }
         </label>
+
         <label class="wide">
           Historia / detalle
           <textarea rows="3" formControlName="story"></textarea>
         </label>
+
         <label>
           Precio
           <input type="number" min="0" step="0.01" formControlName="originalPrice" />
+          @if (productForm.controls.originalPrice.invalid && productForm.controls.originalPrice.touched) {
+            <small class="field-error">Introduce un precio mayor que 0.</small>
+          }
         </label>
+
+        <label>
+          Tipo de precio
+          <select formControlName="pricingMode" (change)="onPricingModeChange($any($event.target).value)">
+            @for (option of pricingOptions; track option.value) {
+              <option [value]="option.value">{{ option.label }}</option>
+            }
+          </select>
+        </label>
+
         <label>
           Stock
-          <input type="number" min="0" formControlName="stock" />
+          <input type="number" min="0" formControlName="stock" (input)="onStockChange($any($event.target).value)" />
+          @if (productForm.controls.stock.invalid && productForm.controls.stock.touched) {
+            <small class="field-error">El stock no puede ser negativo.</small>
+          }
         </label>
-        <label class="checkbox-label">
-          <input type="checkbox" formControlName="hasOffer" />
-          Oferta activa
-        </label>
+
         <label>
-          Precio oferta
-          <input type="number" min="0" step="0.01" formControlName="offerPrice" />
+          Estado
+          <select formControlName="status" (change)="onStatusChange($any($event.target).value)">
+            @for (option of statusOptions; track option.value) {
+              <option [value]="option.value">{{ option.label }}</option>
+            }
+          </select>
         </label>
+
+        @if (productForm.controls.pricingMode.value === 'individual_offer') {
+          <label>
+            Precio oferta
+            <input type="number" min="0" step="0.01" formControlName="offerPrice" />
+          </label>
+        }
+
+        @if (productForm.controls.pricingMode.value === 'campaign') {
+          <label>
+            Campana activa
+            <select formControlName="campaignId">
+              <option value="">Selecciona una campana</option>
+              @for (campaign of campaigns$ | async; track trackCampaign(campaign)) {
+                <option [value]="campaign.id">{{ campaign.name }} · {{ getCampaignLifecycleLabel(campaign) }}</option>
+              }
+            </select>
+          </label>
+        }
+
         <label class="wide">
           URL imagen principal
           <input type="url" formControlName="imageUrl" />
+          @if (productForm.controls.imageUrl.invalid && productForm.controls.imageUrl.touched) {
+            <small class="field-error">Usa una URL valida que empiece por http o https.</small>
+          }
         </label>
+
+        <label class="wide upload-label">
+          Subir imagen a Firebase Storage
+          <input type="file" accept="image/*" [disabled]="isUploadingImage()" (change)="uploadImage($event)" />
+          <small class="upload-help">
+            JPG, PNG o WebP. Maximo 4 MB. Al subirla, se rellenara la URL automaticamente.
+          </small>
+        </label>
+
+        @if (offerErrorMessage) {
+          <p class="form-error wide">{{ offerErrorMessage }}</p>
+        }
+
         <label>
           Tamanos / variantes
           <input type="text" formControlName="sizes" />
         </label>
+
         <label>
           Colores
           <input type="text" formControlName="colors" />
         </label>
+
         <label class="checkbox-label wide">
           <input type="checkbox" formControlName="featured" />
           Mostrar en destacados
         </label>
 
         <div class="form-actions">
-          <button type="submit">{{ editingProductId() ? 'Guardar cambios' : 'Crear producto' }}</button>
+          <button type="submit" [disabled]="isSavingProduct() || isUploadingImage()">{{ saveButtonLabel }}</button>
           @if (editingProductId()) {
-            <button type="button" class="secondary-button" (click)="resetForm()">Cancelar</button>
+            <button
+              type="button"
+              class="secondary-button"
+              [disabled]="isSavingProduct() || isUploadingImage()"
+              (click)="resetForm()">
+              Cancelar
+            </button>
           }
         </div>
       </form>
@@ -99,8 +204,43 @@
 
     <aside class="admin-panel">
       <div class="panel-title">
-        <h2>Pedidos pendientes</h2>
-        <span>WhatsApp</span>
+        <h2>Vista previa</h2>
+        <span>Ficha rapida</span>
+      </div>
+
+      <article class="preview-card">
+        @if (previewImageUrl; as imageUrl) {
+          <img [src]="imageUrl" [alt]="productForm.controls.name.value || 'Vista previa del producto'" />
+        } @else {
+          <div class="preview-placeholder">Sin imagen</div>
+        }
+
+        <div class="preview-copy">
+          <strong>{{ productForm.controls.name.value || 'Nombre del producto' }}</strong>
+          <span>
+            {{ productForm.controls.category.value || 'Categoria' }}
+            @if (productForm.controls.collection.value) {
+              · {{ productForm.controls.collection.value }}
+            }
+          </span>
+          <mark class="status-badge" [class.status-badge-muted]="previewStatus !== 'active'">
+            {{ getStatusLabel(previewStatus) }}
+          </mark>
+          <small class="pricing-mode">{{ getPricingLabel(productForm.controls.pricingMode.value) }}</small>
+          @if (previewCampaign; as campaignBadge) {
+            <mark class="campaign-badge">{{ campaignBadge }}</mark>
+          }
+          <p>{{ productForm.controls.description.value || 'La descripcion del producto aparecera aqui.' }}</p>
+          <b>{{ pricePreview | currency: 'EUR' }}</b>
+          @if (comparePricePreview; as comparePrice) {
+            <span class="compare-price">{{ comparePrice | currency: 'EUR' }}</span>
+          }
+        </div>
+      </article>
+
+      <div class="panel-title orders-title">
+        <h2>Pedidos activos</h2>
+        <span>Resumen rapido</span>
       </div>
       <div class="orders-list">
         @for (order of pendingOrders$ | async; track order.id) {
@@ -109,43 +249,341 @@
               <strong>{{ order.customer.name }}</strong>
               <span>{{ order.total | currency: 'EUR' }}</span>
             </div>
-            <p>{{ order.items.length }} lineas · {{ order.customer.city }}</p>
-            <button type="button" (click)="markOrderAsSent(order.id)">Marcar enviado</button>
+            <p>{{ getOrderStatus(order) }} - {{ getDeliveryMethodLabel(order.customer.deliveryMethod) }}</p>
+            @if (getOrderPrimaryAction(order); as action) {
+              <button
+                type="button"
+                [disabled]="activeOrderActionId() === order.id"
+                (click)="updateOrderStatus(order.id, action.status)">
+                {{ activeOrderActionId() === order.id ? 'Actualizando...' : action.label }}
+              </button>
+            }
           </article>
         } @empty {
           <p class="muted">Aun no hay pedidos preparados.</p>
         }
       </div>
-      <button class="clear-orders-button" type="button" (click)="clearOrders()">Limpiar pedidos</button>
+      <button
+        class="clear-orders-button"
+        type="button"
+        [disabled]="isClearingOrders()"
+        (click)="clearOrders()">
+        {{ isClearingOrders() ? 'Limpiando...' : 'Limpiar pedidos' }}
+      </button>
     </aside>
   </div>
+
+  <section class="admin-panel orders-panel">
+    <div class="panel-title">
+      <h2>Pedidos</h2>
+      <span>{{ modeLabel }}</span>
+    </div>
+
+    <form class="orders-toolbar" [formGroup]="orderFiltersForm">
+      <label>
+        Estado
+        <select formControlName="status">
+          @for (option of orderStatusOptions; track option.value) {
+            <option [value]="option.value">{{ option.label }}</option>
+          }
+        </select>
+      </label>
+
+      <label>
+        Entrega
+        <select formControlName="deliveryMethod">
+          @for (option of deliveryMethodOptions; track option.value) {
+            <option [value]="option.value">{{ option.label }}</option>
+          }
+        </select>
+      </label>
+
+      <label class="wide">
+        Buscar
+        <input type="search" formControlName="query" placeholder="Pedido, clienta, ciudad o producto" />
+      </label>
+    </form>
+
+    <div class="managed-orders-grid">
+      @for (order of filteredOrders$ | async; track order.id) {
+        <article class="managed-order-card">
+          <div class="managed-order-head">
+            <div>
+              <strong>{{ order.customer.name }}</strong>
+              <span>{{ order.id }}</span>
+            </div>
+            <div class="managed-order-total">
+              <mark
+                class="status-badge order-status-badge"
+                [class.order-status-new]="order.status === 'new'"
+                [class.order-status-confirmed]="order.status === 'confirmed'"
+                [class.order-status-prepared]="order.status === 'prepared'"
+                [class.order-status-completed]="order.status === 'completed'"
+                [class.order-status-cancelled]="order.status === 'cancelled'">
+                {{ getOrderStatus(order) }}
+              </mark>
+              <strong>{{ order.total | currency: 'EUR' }}</strong>
+            </div>
+          </div>
+
+          <div class="managed-order-grid">
+            <div>
+              <span>Entrega</span>
+              <strong>{{ getDeliveryMethodLabel(order.customer.deliveryMethod) }}</strong>
+            </div>
+            <div>
+              <span>Destino</span>
+              <strong>{{ getOrderDestination(order) }}</strong>
+            </div>
+            <div>
+              <span>Creado</span>
+              <strong>{{ order.createdAt | date: 'dd/MM/yyyy HH:mm' }}</strong>
+            </div>
+            <div>
+              <span>Actualizado</span>
+              <strong>{{ order.updatedAt | date: 'dd/MM/yyyy HH:mm' }}</strong>
+            </div>
+            <div>
+              <span>Contacto</span>
+              <strong>{{ order.customer.phone }}</strong>
+            </div>
+            <div>
+              <span>Lineas</span>
+              <strong>{{ order.items.length }}</strong>
+            </div>
+          </div>
+
+          <div class="managed-order-lines">
+            @for (item of order.items; track item.productId + item.variant) {
+              <span>{{ item.quantity }} x {{ item.productName }} ({{ item.variant }})</span>
+            }
+          </div>
+
+          @if (order.customer.notes) {
+            <p class="managed-order-notes">
+              <strong>Notas:</strong> {{ order.customer.notes }}
+            </p>
+          }
+
+          <div class="row-actions">
+            @if (getOrderPrimaryAction(order); as action) {
+              <button
+                type="button"
+                [disabled]="activeOrderActionId() === order.id"
+                (click)="updateOrderStatus(order.id, action.status)">
+                {{ activeOrderActionId() === order.id ? 'Actualizando...' : action.label }}
+              </button>
+            }
+
+            @if (canCancelOrder(order)) {
+              <button
+                type="button"
+                class="secondary-button"
+                [disabled]="activeOrderActionId() === order.id"
+                (click)="updateOrderStatus(order.id, 'cancelled')">
+                Cancelar
+              </button>
+            }
+          </div>
+        </article>
+      } @empty {
+        <p class="muted">No hay pedidos que coincidan con el filtro actual.</p>
+      }
+    </div>
+  </section>
 
   <section class="admin-panel catalog-panel">
     <div class="panel-title">
       <h2>Catalogo</h2>
-      <span>Mock Firestore</span>
+      <span>{{ modeLabel }}</span>
     </div>
 
-    <div class="product-table">
-      <div class="table-head">
-        <span>Producto</span>
-        <span>Categoria</span>
-        <span>Stock</span>
-        <span>Precio</span>
-        <span>Acciones</span>
-      </div>
-      @for (product of products$ | async; track product.id) {
-        <div class="table-row">
-          <span>{{ product.name }}</span>
-          <span>{{ product.category }}</span>
-          <span [class.warning]="product.stock <= 4">{{ product.stock }}</span>
-          <span>{{ (product.offerPrice ?? product.originalPrice) | currency: 'EUR' }}</span>
-          <span class="row-actions">
-            <button type="button" (click)="editProduct(product)">Editar</button>
-            <button type="button" class="danger-button" (click)="deleteProduct(product.id)">Borrar</button>
-          </span>
+    @if (loading$ | async) {
+      <p class="muted">Sincronizando productos...</p>
+    } @else {
+      <div class="product-table">
+        <div class="table-head">
+          <span>Producto</span>
+          <span>Taxonomia</span>
+          <span>Precio</span>
+          <span>Promo</span>
+          <span>Estado</span>
+          <span>Stock</span>
+          <span>Acciones</span>
         </div>
-      }
+        @for (product of products$ | async; track product.id) {
+          <div class="table-row">
+            <span>{{ product.name }}</span>
+            <span>{{ getProductTaxonomy(product) }}</span>
+            <span>
+              {{ getProductPrice(product) | currency: 'EUR' }}
+              @if (getProductComparePrice(product); as comparePrice) {
+                <small class="compare-price">{{ comparePrice | currency: 'EUR' }}</small>
+              }
+            </span>
+            <span>
+              @if (getProductPricingBadge(product); as pricingBadge) {
+                <mark class="campaign-badge">{{ pricingBadge }}</mark>
+              } @else {
+                <small class="muted">Sin promo</small>
+              }
+            </span>
+            <span>
+              <mark class="status-badge" [class.status-badge-muted]="product.status !== 'active'">
+                {{ getStatusLabel(product.status) }}
+              </mark>
+            </span>
+            <span [class.warning]="product.status === 'active' && product.stock <= 4">{{ product.stock }}</span>
+            <span class="row-actions">
+              <button type="button" [disabled]="activeProductActionId() === product.id" (click)="editProduct(product)">
+                Editar
+              </button>
+              <button
+                type="button"
+                class="danger-button"
+                [disabled]="activeProductActionId() === product.id"
+                (click)="deleteProduct(product.id)">
+                {{ activeProductActionId() === product.id ? 'Borrando...' : 'Borrar' }}
+              </button>
+            </span>
+          </div>
+        }
+      </div>
+    }
+  </section>
+
+  <section class="admin-panel campaigns-panel">
+    <div class="panel-title">
+      <h2>Campanas y promociones</h2>
+      <div class="campaign-header-actions">
+        <span>{{ modeLabel }}</span>
+        <button type="button" class="secondary-button" [disabled]="isResettingCampaigns()" (click)="resetCampaigns()">
+          {{ isResettingCampaigns() ? 'Restaurando...' : 'Restaurar demo' }}
+        </button>
+      </div>
+    </div>
+
+    <div class="campaigns-layout">
+      <section class="campaign-editor">
+        <h3>{{ editingCampaignId() ? 'Editar campana' : 'Nueva campana' }}</h3>
+
+        <form class="campaign-form" [formGroup]="campaignForm" (ngSubmit)="saveCampaign()">
+          <label>
+            Nombre
+            <input type="text" formControlName="name" />
+          </label>
+
+          <label>
+            Badge corto
+            <input type="text" formControlName="badge" />
+          </label>
+
+          <label class="wide">
+            Descripcion
+            <textarea rows="3" formControlName="description"></textarea>
+          </label>
+
+          <label>
+            Tipo de descuento
+            <select formControlName="discountType">
+              @for (option of discountTypeOptions; track option.value) {
+                <option [value]="option.value">{{ option.label }}</option>
+              }
+            </select>
+          </label>
+
+          <label>
+            Valor
+            <input type="number" min="1" step="0.01" formControlName="discountValue" />
+          </label>
+
+          <label>
+            Inicio
+            <input type="date" formControlName="startsAt" />
+          </label>
+
+          <label>
+            Fin
+            <input type="date" formControlName="endsAt" />
+          </label>
+
+          <label class="checkbox-label wide">
+            <input type="checkbox" formControlName="active" />
+            Campana habilitada
+          </label>
+
+          <div class="form-actions">
+            <button type="submit" [disabled]="isSavingCampaign()">{{ saveCampaignButtonLabel }}</button>
+            @if (editingCampaignId()) {
+              <button type="button" class="secondary-button" [disabled]="isSavingCampaign()" (click)="resetCampaignForm()">
+                Cancelar
+              </button>
+            }
+          </div>
+        </form>
+      </section>
+
+      <section class="campaign-list-shell">
+        <h3>Campanas creadas</h3>
+
+        @if (campaignsLoading$ | async) {
+          <p class="muted">Cargando campanas...</p>
+        } @else {
+          <div class="campaign-list">
+            @for (entry of campaignSummaries$ | async; track entry.campaign.id) {
+              <article class="campaign-card">
+                <div class="campaign-card-head">
+                  <div>
+                    <strong>{{ entry.campaign.name }}</strong>
+                    <p>{{ entry.campaign.description }}</p>
+                  </div>
+                  <div class="campaign-meta">
+                    <mark class="campaign-badge">{{ entry.campaign.badge }}</mark>
+                    <mark class="lifecycle-badge {{ getCampaignLifecycleClass(entry.campaign) }}">
+                      {{ getCampaignLifecycleLabel(entry.campaign) }}
+                    </mark>
+                  </div>
+                </div>
+
+                <div class="campaign-stats">
+                  <span>
+                    {{ entry.campaign.discountType === 'percentage'
+                      ? entry.campaign.discountValue + '%'
+                      : (entry.campaign.discountValue | currency: 'EUR') }}
+                  </span>
+                  <span>{{ entry.usageCount }} producto(s)</span>
+                  <span>
+                    {{ entry.campaign.startsAt ? (entry.campaign.startsAt | date: 'dd/MM/yyyy') : 'Sin inicio' }}
+                    -
+                    {{ entry.campaign.endsAt ? (entry.campaign.endsAt | date: 'dd/MM/yyyy') : 'Sin fin' }}
+                  </span>
+                </div>
+
+                <div class="row-actions">
+                  <button type="button" [disabled]="activeCampaignActionId() === entry.campaign.id" (click)="editCampaign(entry.campaign)">
+                    Editar
+                  </button>
+                  <button
+                    type="button"
+                    class="danger-button"
+                    [disabled]="activeCampaignActionId() === entry.campaign.id"
+                    (click)="deleteCampaign(entry.campaign.id, entry.usageCount)">
+                    {{ activeCampaignActionId() === entry.campaign.id ? 'Borrando...' : 'Borrar' }}
+                  </button>
+                </div>
+              </article>
+            } @empty {
+              <p class="muted">Todavia no hay campanas creadas.</p>
+            }
+          </div>
+        }
+      </section>
     </div>
   </section>
+
+  <datalist id="collection-options">
+    @for (collection of collections$ | async; track collection.slug) {
+      <option [value]="collection.name"></option>
+    }
+  </datalist>
 </section>
