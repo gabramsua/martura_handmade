@@ -1,0 +1,63 @@
+<section class="checkout-shell">
+  <div class="section-heading">
+    <p class="eyebrow">Checkout sin pasarela</p>
+    <h1>Preparar pedido</h1>
+    <p>Generaremos un pedido estructurado y un mensaje listo para enviar por WhatsApp.</p>
+  </div>
+
+  @if (summary$ | async; as summary) {
+    @if (summary.items.length > 0) {
+      <div class="checkout-layout">
+        <form class="checkout-form" [formGroup]="checkoutForm" (ngSubmit)="prepareOrder(summary)">
+          <label>
+            Nombre
+            <input type="text" formControlName="name" autocomplete="name" />
+          </label>
+          <label>
+            Email
+            <input type="email" formControlName="email" autocomplete="email" />
+          </label>
+          <label>
+            Telefono
+            <input type="tel" formControlName="phone" autocomplete="tel" />
+          </label>
+          <label>
+            Ciudad
+            <input type="text" formControlName="city" autocomplete="address-level2" />
+          </label>
+          <label class="wide">
+            Notas para el pedido
+            <textarea rows="4" formControlName="notes"></textarea>
+          </label>
+
+          <button class="button primary" type="submit">Generar mensaje</button>
+        </form>
+
+        <aside class="order-preview">
+          <h2>Pedido</h2>
+          @for (item of summary.items; track item.product.id + item.variant) {
+            <div class="preview-item">
+              <span>{{ item.quantity }} x {{ item.product.name }}</span>
+              <strong>{{ ((item.product.offerPrice ?? item.product.originalPrice) * item.quantity) | currency: 'EUR' }}</strong>
+            </div>
+          }
+          <div class="preview-total">
+            <span>Total</span>
+            <strong>{{ summary.total | currency: 'EUR' }}</strong>
+          </div>
+
+          @if (whatsappUrl) {
+            <a class="button whatsapp" [href]="whatsappUrl" target="_blank" rel="noreferrer">
+              Enviar por WhatsApp
+            </a>
+          }
+        </aside>
+      </div>
+    } @else {
+      <div class="empty-checkout">
+        <h2>No hay productos para preparar pedido.</h2>
+        <a class="button primary" routerLink="/">Volver a la tienda</a>
+      </div>
+    }
+  }
+</section>

@@ -1,0 +1,30 @@
+<header class="site-header">
+  <a class="brand" routerLink="/" aria-label="Martura Handmade">
+    <span class="brand-mark">M</span>
+    <span>
+      <strong>Martura</strong>
+      <small>Handmade</small>
+    </span>
+  </a>
+
+  <nav class="main-nav" aria-label="Navegacion principal">
+    <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Tienda</a>
+    <a routerLink="/admin" routerLinkActive="active">Dashboard</a>
+  </nav>
+
+  <a class="cart-link" routerLink="/carrito" aria-label="Ver carrito">
+    <span>Carrito</span>
+    @if (cartItems$ | async; as totalItems) {
+      <strong>{{ totalItems }}</strong>
+    }
+  </a>
+</header>
+
+<main>
+  <router-outlet />
+</main>
+
+<footer class="site-footer">
+  <p>Martura Handmade · piezas textiles hechas despacio en Espana.</p>
+  <a routerLink="/checkout">Cerrar pedido</a>
+</footer>

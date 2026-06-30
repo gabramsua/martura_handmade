@@ -1,0 +1,58 @@
+@if (product$ | async; as product) {
+  <section class="detail-shell">
+    <div class="detail-gallery">
+      <img class="main-image" [src]="product.imageUrl" [alt]="product.name" />
+      <div class="thumb-row">
+        @for (image of product.gallery; track image) {
+          <img [src]="image" [alt]="product.name" />
+        }
+      </div>
+    </div>
+
+    <article class="detail-info">
+      <a class="back-link" routerLink="/">Volver al catalogo</a>
+      <p class="eyebrow">{{ product.category }}</p>
+      <h1>{{ product.name }}</h1>
+      <p class="description">{{ product.description }}</p>
+      <p class="story">{{ product.story }}</p>
+
+      <div class="price-row">
+        <strong>{{ (product.offerPrice ?? product.originalPrice) | currency: 'EUR' : 'symbol' : '1.0-0' : 'es' }}</strong>
+        @if (product.offerPrice !== null) {
+          <span>{{ product.originalPrice | currency: 'EUR' : 'symbol' : '1.0-0' : 'es' }}</span>
+        }
+      </div>
+
+      <div class="variant-panel">
+        <p>Tamano o variante</p>
+        <div class="variant-list">
+          @for (size of product.sizes; track size) {
+            <button type="button" (click)="addToCart(product, size)">
+              Anadir {{ size }}
+            </button>
+          }
+        </div>
+      </div>
+
+      <dl class="detail-meta">
+        <div>
+          <dt>Stock</dt>
+          <dd>{{ product.stock }} disponibles</dd>
+        </div>
+        <div>
+          <dt>Colores</dt>
+          <dd>{{ product.colors.join(', ') }}</dd>
+        </div>
+        <div>
+          <dt>Envio</dt>
+          <dd>Gratis desde 75 EUR</dd>
+        </div>
+      </dl>
+    </article>
+  </section>
+} @else {
+  <section class="missing-product">
+    <h1>No encontramos esta pieza</h1>
+    <a routerLink="/">Volver a la tienda</a>
+  </section>
+}

@@ -1,0 +1,102 @@
+<section class="hero">
+  <div class="hero-copy">
+    <p class="eyebrow">Nueva coleccion artesanal</p>
+    <h1>Martura Handmade</h1>
+    <p>
+      Bolsos, neceseres y accesorios textiles hechos a mano en pequenas series,
+      con tejidos escogidos y acabados pensados para el uso diario.
+    </p>
+    <div class="hero-actions">
+      <a class="button primary" href="#catalogo">Ver catalogo</a>
+      <a class="button ghost" routerLink="/admin">Panel privado</a>
+    </div>
+  </div>
+</section>
+
+<section class="featured-section">
+  <div class="section-heading">
+    <p class="eyebrow">Seleccion destacada</p>
+    <h2>Piezas listas para salir del taller</h2>
+  </div>
+
+  <div class="featured-grid">
+    @for (product of featuredProducts$ | async; track product.id) {
+      <article class="featured-product">
+        <img [src]="product.imageUrl" [alt]="product.name" />
+        <div>
+          <p>{{ product.category }}</p>
+          <h3>{{ product.name }}</h3>
+          <a [routerLink]="['/producto', product.slug]">Ver pieza</a>
+        </div>
+      </article>
+    }
+  </div>
+</section>
+
+<section class="catalog-section" id="catalogo">
+  <div class="catalog-toolbar">
+    <div>
+      <p class="eyebrow">Catalogo</p>
+      <h2>Compra por pieza</h2>
+    </div>
+
+    @if (filters$ | async; as filters) {
+      <div class="filters" aria-label="Filtros de catalogo">
+        <input
+          type="search"
+          placeholder="Buscar bolsos, fundas..."
+          [value]="filters.query"
+          (input)="updateQuery($any($event.target).value)"
+        />
+
+        <button type="button" [class.selected]="!filters.categorySlug" (click)="selectCategory(null)">
+          Todo
+        </button>
+        @for (category of categories$ | async; track category.slug) {
+          <button
+            type="button"
+            [class.selected]="filters.categorySlug === category.slug"
+            (click)="selectCategory(category.slug)"
+          >
+            {{ category.name }}
+          </button>
+        }
+
+        <label class="offer-toggle">
+          <input
+            type="checkbox"
+            [checked]="filters.onlyOffers"
+            (change)="toggleOffers($any($event.target).checked)"
+          />
+          Ofertas
+        </label>
+      </div>
+    }
+  </div>
+
+  <div class="product-grid">
+    @for (product of filteredProducts$ | async; track product.id) {
+      <article class="product-card">
+        <a [routerLink]="['/producto', product.slug]" class="product-image">
+          <img [src]="product.imageUrl" [alt]="product.name" />
+          @if (product.offerPrice !== null) {
+            <span>Oferta</span>
+          }
+        </a>
+        <div class="product-content">
+          <p>{{ product.category }}</p>
+          <h3>{{ product.name }}</h3>
+          <p>{{ product.description }}</p>
+          <div class="product-footer">
+            <strong>
+              {{ (product.offerPrice ?? product.originalPrice) | currency: 'EUR' : 'symbol' : '1.0-0' : 'es' }}
+            </strong>
+            <button type="button" (click)="addToCart(product)">Anadir</button>
+          </div>
+        </div>
+      </article>
+    } @empty {
+      <p class="empty-state">No hay piezas con esos filtros.</p>
+    }
+  </div>
+</section>

@@ -1,0 +1,60 @@
+<section class="cart-shell">
+  <div class="section-heading">
+    <p class="eyebrow">Carrito</p>
+    <h1>Tu seleccion</h1>
+  </div>
+
+  @if (summary$ | async; as summary) {
+    @if (summary.items.length > 0) {
+      <div class="cart-layout">
+        <div class="cart-items">
+          @for (item of summary.items; track item.product.id + item.variant) {
+            <article class="cart-item">
+              <img [src]="item.product.imageUrl" [alt]="item.product.name" />
+              <div>
+                <p>{{ item.product.category }}</p>
+                <h2>{{ item.product.name }}</h2>
+                <span>{{ item.variant }}</span>
+                <div class="quantity-row">
+                  <button type="button" (click)="updateQuantity(item.product.id, item.variant, item.quantity - 1)">-</button>
+                  <strong>{{ item.quantity }}</strong>
+                  <button type="button" (click)="updateQuantity(item.product.id, item.variant, item.quantity + 1)">+</button>
+                </div>
+              </div>
+              <strong>
+                {{ ((item.product.offerPrice ?? item.product.originalPrice) * item.quantity) | currency: 'EUR' }}
+              </strong>
+              <button class="remove-button" type="button" (click)="removeItem(item.product.id, item.variant)">
+                Quitar
+              </button>
+            </article>
+          }
+        </div>
+
+        <aside class="summary-panel">
+          <h2>Resumen</h2>
+          <dl>
+            <div>
+              <dt>Subtotal</dt>
+              <dd>{{ summary.subtotal | currency: 'EUR' }}</dd>
+            </div>
+            <div>
+              <dt>Envio</dt>
+              <dd>{{ summary.shipping | currency: 'EUR' }}</dd>
+            </div>
+            <div class="total-row">
+              <dt>Total</dt>
+              <dd>{{ summary.total | currency: 'EUR' }}</dd>
+            </div>
+          </dl>
+          <a class="button primary" routerLink="/checkout">Preparar pedido</a>
+        </aside>
+      </div>
+    } @else {
+      <div class="empty-cart">
+        <h2>El carrito esta esperando su primera pieza.</h2>
+        <a class="button primary" routerLink="/">Volver al catalogo</a>
+      </div>
+    }
+  }
+</section>
