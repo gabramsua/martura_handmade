@@ -30,6 +30,10 @@ export interface CheckoutOrder {
   createdAt: Date;
 }
 
+export interface OrderFilters {
+  status: CheckoutOrder['status'] | 'all';
+}
+
 export function cartItemToOrderItem(item: CartItem): OrderItem {
   const unitPrice = item.product.offerPrice ?? item.product.originalPrice;
 

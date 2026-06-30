@@ -4,7 +4,7 @@
       <p class="eyebrow">Dashboard privado</p>
       <h1>Gestion Martura Handmade</h1>
     </div>
-    <button type="button">Nuevo producto</button>
+    <button type="button" (click)="resetForm()">Nuevo producto</button>
   </div>
 
   @if (stats$ | async; as stats) {
@@ -31,9 +31,96 @@
   <div class="admin-layout">
     <section class="admin-panel">
       <div class="panel-title">
-        <h2>Catalogo</h2>
-        <span>Mock Firestore</span>
+        <h2>{{ editingProductId() ? 'Editar producto' : 'Nuevo producto' }}</h2>
+        <span>CRUD mock</span>
       </div>
+
+      <form class="product-form" [formGroup]="productForm" (ngSubmit)="saveProduct()">
+        <label>
+          Nombre
+          <input type="text" formControlName="name" />
+        </label>
+        <label>
+          Categoria
+          <input type="text" formControlName="category" />
+        </label>
+        <label class="wide">
+          Descripcion corta
+          <textarea rows="3" formControlName="description"></textarea>
+        </label>
+        <label class="wide">
+          Historia / detalle
+          <textarea rows="3" formControlName="story"></textarea>
+        </label>
+        <label>
+          Precio
+          <input type="number" min="0" step="0.01" formControlName="originalPrice" />
+        </label>
+        <label>
+          Stock
+          <input type="number" min="0" formControlName="stock" />
+        </label>
+        <label class="checkbox-label">
+          <input type="checkbox" formControlName="hasOffer" />
+          Oferta activa
+        </label>
+        <label>
+          Precio oferta
+          <input type="number" min="0" step="0.01" formControlName="offerPrice" />
+        </label>
+        <label class="wide">
+          URL imagen principal
+          <input type="url" formControlName="imageUrl" />
+        </label>
+        <label>
+          Tamanos / variantes
+          <input type="text" formControlName="sizes" />
+        </label>
+        <label>
+          Colores
+          <input type="text" formControlName="colors" />
+        </label>
+        <label class="checkbox-label wide">
+          <input type="checkbox" formControlName="featured" />
+          Mostrar en destacados
+        </label>
+
+        <div class="form-actions">
+          <button type="submit">{{ editingProductId() ? 'Guardar cambios' : 'Crear producto' }}</button>
+          @if (editingProductId()) {
+            <button type="button" class="secondary-button" (click)="resetForm()">Cancelar</button>
+          }
+        </div>
+      </form>
+    </section>
+
+    <aside class="admin-panel">
+      <div class="panel-title">
+        <h2>Pedidos pendientes</h2>
+        <span>WhatsApp</span>
+      </div>
+      <div class="orders-list">
+        @for (order of pendingOrders$ | async; track order.id) {
+          <article class="order-card">
+            <div>
+              <strong>{{ order.customer.name }}</strong>
+              <span>{{ order.total | currency: 'EUR' }}</span>
+            </div>
+            <p>{{ order.items.length }} lineas · {{ order.customer.city }}</p>
+            <button type="button" (click)="markOrderAsSent(order.id)">Marcar enviado</button>
+          </article>
+        } @empty {
+          <p class="muted">Aun no hay pedidos preparados en esta sesion.</p>
+        }
+      </div>
+    </aside>
+  </div>
+
+  <section class="admin-panel catalog-panel">
+    <div class="panel-title">
+      <h2>Catalogo</h2>
+      <span>Mock Firestore</span>
+    </div>
 
       <div class="product-table">
         <div class="table-head">
@@ -41,6 +128,7 @@
           <span>Categoria</span>
           <span>Stock</span>
           <span>Precio</span>
+          <span>Acciones</span>
         </div>
         @for (product of products$ | async; track product.id) {
           <div class="table-row">
@@ -48,22 +136,12 @@
             <span>{{ product.category }}</span>
             <span [class.warning]="product.stock <= 4">{{ product.stock }}</span>
             <span>{{ (product.offerPrice ?? product.originalPrice) | currency: 'EUR' }}</span>
+            <span class="row-actions">
+              <button type="button" (click)="editProduct(product)">Editar</button>
+              <button type="button" class="danger-button" (click)="deleteProduct(product.id)">Borrar</button>
+            </span>
           </div>
         }
       </div>
-    </section>
-
-    <aside class="admin-panel">
-      <div class="panel-title">
-        <h2>Proximos pasos</h2>
-        <span>Firebase</span>
-      </div>
-      <ul class="roadmap-list">
-        <li>Auth social para clientes antes del checkout.</li>
-        <li>Rol admin almacenado en Firestore.</li>
-        <li>Storage para imagenes de producto.</li>
-        <li>Pedidos preparados para n8n/webhooks.</li>
-      </ul>
-    </aside>
-  </div>
+  </section>
 </section>

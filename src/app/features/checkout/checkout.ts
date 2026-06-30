@@ -8,6 +8,7 @@ import { CartSummary } from '../../core/models/cart.model';
 import { CheckoutOrder } from '../../core/models/order.model';
 import { CartService } from '../../core/services/cart.service';
 import { CheckoutService } from '../../core/services/checkout.service';
+import { OrdersService } from '../../core/services/orders.service';
 
 @Component({
   selector: 'app-checkout',
@@ -20,6 +21,7 @@ export class Checkout {
   private readonly formBuilder = inject(FormBuilder);
   private readonly cartService = inject(CartService);
   private readonly checkoutService = inject(CheckoutService);
+  private readonly ordersService = inject(OrdersService);
 
   readonly summary$ = this.cartService.summary$;
   readonly canCheckout$ = this.summary$.pipe(map((summary) => summary.items.length > 0));
@@ -47,5 +49,6 @@ export class Checkout {
 
     this.lastOrder = order;
     this.whatsappUrl = this.checkoutService.buildWhatsappUrl(order);
+    this.ordersService.saveDraft(order);
   }
 }

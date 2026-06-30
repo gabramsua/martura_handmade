@@ -18,6 +18,11 @@ export interface Product {
   createdAt: Date;
 }
 
+export type ProductDraft = Omit<Product, 'id' | 'slug' | 'createdAt'> & {
+  id?: string;
+  slug?: string;
+};
+
 export interface ProductFilters {
   categorySlug: string | null;
   query: string;

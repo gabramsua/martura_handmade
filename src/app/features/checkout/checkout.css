@@ -75,6 +75,16 @@
   font-weight: 900;
 }
 
+.saved-order {
+  background: #edf7f1;
+  border-radius: 6px;
+  color: #1f6b4b;
+  font-weight: 800;
+  line-height: 1.4;
+  margin: 12px 0 0;
+  padding: 10px 12px;
+}
+
 .whatsapp {
   background: #1f7a54;
   color: #fff;

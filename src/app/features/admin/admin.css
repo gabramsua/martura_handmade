@@ -59,7 +59,8 @@
   align-items: start;
   display: grid;
   gap: 24px;
-  grid-template-columns: minmax(0, 1fr) 340px;
+  grid-template-columns: minmax(0, 1fr) 380px;
+  margin-bottom: 24px;
 }
 
 .panel-title {
@@ -78,7 +79,75 @@
   padding: 7px 10px;
 }
 
-.product-table {
+.product-form {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.product-form label {
+  color: var(--muted);
+  display: grid;
+  font-weight: 800;
+  gap: 7px;
+}
+
+.product-form .wide,
+.form-actions {
+  grid-column: 1 / -1;
+}
+
+.product-form input,
+.product-form textarea {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--ink);
+  min-height: 42px;
+  padding: 9px 11px;
+}
+
+.checkbox-label {
+  align-items: center;
+  display: flex;
+  flex-direction: row;
+  gap: 10px;
+}
+
+.checkbox-label input {
+  min-height: 0;
+}
+
+.form-actions,
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.form-actions button,
+.row-actions button,
+.order-card button {
+  background: var(--ink);
+  color: #fff;
+  font-weight: 800;
+  padding: 0 14px;
+}
+
+.secondary-button {
+  background: var(--sand) !important;
+  color: var(--ink) !important;
+}
+
+.danger-button {
+  background: var(--rose-dark) !important;
+}
+
+.catalog-panel {
+  margin-top: 0;
+}
+
+.product-table,
+.orders-list {
   display: grid;
   gap: 8px;
 }
@@ -87,7 +156,7 @@
 .table-row {
   display: grid;
   gap: 12px;
-  grid-template-columns: 1.4fr 1fr 0.5fr 0.7fr;
+  grid-template-columns: 1.3fr 0.9fr 0.45fr 0.65fr 1fr;
   padding: 12px;
 }
 
@@ -119,6 +188,25 @@
   padding-left: 20px;
 }
 
+.order-card {
+  background: var(--paper);
+  border-radius: 6px;
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+}
+
+.order-card div {
+  display: flex;
+  justify-content: space-between;
+}
+
+.order-card p,
+.muted {
+  color: var(--muted);
+  margin: 0;
+}
+
 @media (max-width: 980px) {
   .stats-grid,
   .admin-layout {
@@ -135,6 +223,7 @@
 
   .stats-grid,
   .admin-layout,
+  .product-form,
   .table-head,
   .table-row {
     grid-template-columns: 1fr;
