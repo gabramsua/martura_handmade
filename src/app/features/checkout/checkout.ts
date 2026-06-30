@@ -10,6 +10,7 @@ import { AuthService } from '../../core/services/auth.service';
 import { CartService } from '../../core/services/cart.service';
 import { CheckoutService } from '../../core/services/checkout.service';
 import { OrdersService } from '../../core/services/orders.service';
+import { ProductsService } from '../../core/services/products.service';
 
 @Component({
   selector: 'app-checkout',
@@ -24,6 +25,7 @@ export class Checkout {
   private readonly cartService = inject(CartService);
   private readonly checkoutService = inject(CheckoutService);
   private readonly ordersService = inject(OrdersService);
+  private readonly productsService = inject(ProductsService);
 
   readonly summary$ = this.cartService.summary$;
   readonly canCheckout$ = this.summary$.pipe(map((summary) => summary.items.length > 0));
@@ -37,6 +39,7 @@ export class Checkout {
 
   lastOrder: CheckoutOrder | null = null;
   whatsappUrl: string | null = null;
+  errorMessage: string | null = null;
 
   constructor() {
     const user = this.authService.currentUser;
@@ -55,6 +58,13 @@ export class Checkout {
       return;
     }
 
+    const stockValidation = this.productsService.validateCartItems(summary.items);
+
+    if (!stockValidation.valid) {
+      this.errorMessage = stockValidation.message;
+      return;
+    }
+
     const order = this.checkoutService.buildOrder(
       summary,
       {
@@ -64,8 +74,11 @@ export class Checkout {
       this.authService.currentUser?.id ?? 'mock-user',
     );
 
+    this.errorMessage = null;
     this.lastOrder = order;
     this.whatsappUrl = this.checkoutService.buildWhatsappUrl(order);
     this.ordersService.saveDraft(order);
+    this.productsService.applyOrder(order.items);
+    this.cartService.clear();
   }
 }

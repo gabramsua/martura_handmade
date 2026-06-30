@@ -3,6 +3,8 @@ import { BehaviorSubject, combineLatest, map, Observable, of } from 'rxjs';
 
 import { MOCK_PRODUCTS, PRODUCT_CATEGORIES } from '../data/mock-products';
 import { Product, ProductDraft, ProductFilters } from '../models/product.model';
+import { CartItem } from '../models/cart.model';
+import { OrderItem } from '../models/order.model';
 import { LocalStorageService } from './local-storage.service';
 
 const INITIAL_FILTERS: ProductFilters = {
@@ -53,6 +55,28 @@ export class ProductsService {
     );
   }
 
+  validateCartItems(items: CartItem[]): { valid: boolean; message: string | null } {
+    for (const item of items) {
+      const product = this.productsSubject.value.find((entry) => entry.id === item.product.id);
+
+      if (!product) {
+        return {
+          valid: false,
+          message: `La pieza "${item.product.name}" ya no esta disponible.`,
+        };
+      }
+
+      if (product.stock < item.quantity) {
+        return {
+          valid: false,
+          message: `Solo quedan ${product.stock} unidades de "${product.name}".`,
+        };
+      }
+    }
+
+    return { valid: true, message: null };
+  }
+
   createProduct(draft: ProductDraft): void {
     const product = this.draftToProduct(draft);
     this.setProducts([product, ...this.productsSubject.value]);
@@ -78,6 +102,20 @@ export class ProductsService {
 
   resetProducts(): void {
     this.setProducts(MOCK_PRODUCTS);
+  }
+
+  applyOrder(orderItems: OrderItem[]): void {
+    const orderedQuantityByProduct = orderItems.reduce<Record<string, number>>((accumulator, item) => {
+      accumulator[item.productId] = (accumulator[item.productId] ?? 0) + item.quantity;
+      return accumulator;
+    }, {});
+
+    this.setProducts(
+      this.productsSubject.value.map((product) => ({
+        ...product,
+        stock: Math.max(0, product.stock - (orderedQuantityByProduct[product.id] ?? 0)),
+      })),
+    );
   }
 
   private applyFilters(products: Product[], filters: ProductFilters): Product[] {

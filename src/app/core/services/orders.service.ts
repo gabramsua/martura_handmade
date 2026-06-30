@@ -18,6 +18,10 @@ export class OrdersService {
     map((orders) => orders.filter((order) => order.status !== 'sent')),
   );
 
+  getOrdersForUser(userId: string) {
+    return this.orders$.pipe(map((orders) => orders.filter((order) => order.userId === userId)));
+  }
+
   saveDraft(order: CheckoutOrder): void {
     this.setOrders([order, ...this.ordersSubject.value]);
   }

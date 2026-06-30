@@ -1,0 +1,50 @@
+<section class="orders-shell">
+  <div class="section-heading">
+    <p class="eyebrow">Zona cliente</p>
+    <h1>Mis pedidos</h1>
+    <p>Seguimiento simple del pedido dentro del MVP antes de pasar a Firebase y estados reales.</p>
+  </div>
+
+  <div class="orders-listing">
+    @for (order of orders$ | async; track order.id) {
+      <article class="order-panel">
+        <div class="order-head">
+          <div>
+            <span>Pedido</span>
+            <strong>{{ order.id }}</strong>
+          </div>
+          <div>
+            <span>Estado</span>
+            <strong>{{ order.status === 'sent' ? 'Enviado' : 'Pendiente de envio' }}</strong>
+          </div>
+          <div>
+            <span>Fecha</span>
+            <strong>{{ order.createdAt | date: 'dd/MM/yyyy HH:mm' }}</strong>
+          </div>
+          <div>
+            <span>Total</span>
+            <strong>{{ order.total | currency: 'EUR' }}</strong>
+          </div>
+        </div>
+
+        <div class="order-lines">
+          @for (item of order.items; track item.productId + item.variant) {
+            <article class="line-item">
+              <img [src]="item.imageUrl" [alt]="item.productName" />
+              <div>
+                <strong>{{ item.productName }}</strong>
+                <span>{{ item.quantity }} x {{ item.variant }}</span>
+              </div>
+              <strong>{{ item.lineTotal | currency: 'EUR' }}</strong>
+            </article>
+          }
+        </div>
+      </article>
+    } @empty {
+      <div class="empty-orders">
+        <h2>Todavia no hay pedidos en tu cuenta.</h2>
+        <a class="button primary" routerLink="/">Ir a la tienda</a>
+      </div>
+    }
+  </div>
+</section>

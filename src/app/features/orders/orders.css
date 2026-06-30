@@ -1,0 +1,64 @@
+.orders-shell {
+  padding: clamp(36px, 6vw, 78px) clamp(18px, 5vw, 64px);
+}
+
+.orders-listing {
+  display: grid;
+  gap: 18px;
+}
+
+.order-panel,
+.empty-orders {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 20px;
+}
+
+.order-head {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: 18px;
+}
+
+.order-head span,
+.line-item span {
+  color: var(--muted);
+  display: block;
+}
+
+.order-lines {
+  display: grid;
+  gap: 10px;
+}
+
+.line-item {
+  align-items: center;
+  background: var(--paper);
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 72px minmax(0, 1fr) auto;
+  padding: 10px;
+}
+
+.line-item img {
+  aspect-ratio: 1;
+  border-radius: 6px;
+  object-fit: cover;
+  width: 72px;
+}
+
+.empty-orders h2 {
+  font-family: Georgia, "Times New Roman", serif;
+  font-weight: 500;
+  margin-top: 0;
+}
+
+@media (max-width: 860px) {
+  .order-head,
+  .line-item {
+    grid-template-columns: 1fr;
+  }
+}

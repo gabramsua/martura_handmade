@@ -11,6 +11,7 @@ export interface CustomerContact {
 export interface OrderItem {
   productId: string;
   productName: string;
+  imageUrl: string;
   quantity: number;
   variant: string;
   unitPrice: number;
@@ -40,6 +41,7 @@ export function cartItemToOrderItem(item: CartItem): OrderItem {
   return {
     productId: item.product.id,
     productName: item.product.name,
+    imageUrl: item.product.imageUrl,
     quantity: item.quantity,
     variant: item.variant,
     unitPrice,

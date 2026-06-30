@@ -10,6 +10,9 @@
   <nav class="main-nav" aria-label="Navegacion principal">
     <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Tienda</a>
     <a routerLink="/admin" routerLinkActive="active">Dashboard</a>
+    @if (isCustomer$ | async) {
+      <a routerLink="/pedidos" routerLinkActive="active">Mis pedidos</a>
+    }
     @if (user$ | async; as user) {
       <button type="button" class="session-button" (click)="logout()">{{ user.name }}</button>
     } @else {

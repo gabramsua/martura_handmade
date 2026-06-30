@@ -27,6 +27,11 @@ export const routes: Routes = [
     loadComponent: () => import('./features/login/login').then((component) => component.Login),
   },
   {
+    path: 'pedidos',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/orders/orders').then((component) => component.Orders),
+  },
+  {
     path: 'admin',
     canActivate: [adminGuard],
     loadComponent: () => import('./features/admin/admin').then((component) => component.Admin),

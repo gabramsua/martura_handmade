@@ -5,7 +5,48 @@
     <p>Generaremos un pedido estructurado y un mensaje listo para enviar por WhatsApp.</p>
   </div>
 
-  @if (summary$ | async; as summary) {
+  @if (lastOrder) {
+    <div class="order-confirmation">
+      <p class="eyebrow">Pedido preparado</p>
+      <h2>Tu pedido ya esta registrado</h2>
+      <p>
+        Hemos guardado el pedido en la sesion actual, descontado stock y dejado el mensaje listo para enviarlo.
+      </p>
+
+      <div class="confirmation-card">
+        <div class="confirmation-meta">
+          <span>Referencia</span>
+          <strong>{{ lastOrder.id }}</strong>
+        </div>
+        <div class="confirmation-meta">
+          <span>Total</span>
+          <strong>{{ lastOrder.total | currency: 'EUR' }}</strong>
+        </div>
+      </div>
+
+      <div class="confirmation-items">
+        @for (item of lastOrder.items; track item.productId + item.variant) {
+          <article>
+            <img [src]="item.imageUrl" [alt]="item.productName" />
+            <div>
+              <strong>{{ item.productName }}</strong>
+              <span>{{ item.quantity }} x {{ item.variant }}</span>
+            </div>
+            <strong>{{ item.lineTotal | currency: 'EUR' }}</strong>
+          </article>
+        }
+      </div>
+
+      <div class="confirmation-actions">
+        @if (whatsappUrl) {
+          <a class="button whatsapp" [href]="whatsappUrl" target="_blank" rel="noreferrer">
+            Enviar por WhatsApp
+          </a>
+        }
+        <a class="button primary" routerLink="/pedidos">Ver mis pedidos</a>
+      </div>
+    </div>
+  } @else if (summary$ | async; as summary) {
     @if (summary.items.length > 0) {
       <div class="checkout-layout">
         <form class="checkout-form" [formGroup]="checkoutForm" (ngSubmit)="prepareOrder(summary)">
@@ -30,6 +71,10 @@
             <textarea rows="4" formControlName="notes"></textarea>
           </label>
 
+          @if (errorMessage) {
+            <p class="form-error">{{ errorMessage }}</p>
+          }
+
           <button class="button primary" type="submit">Generar mensaje</button>
         </form>
 
@@ -45,13 +90,6 @@
             <span>Total</span>
             <strong>{{ summary.total | currency: 'EUR' }}</strong>
           </div>
-
-          @if (whatsappUrl) {
-            <p class="saved-order">Pedido preparado y visible en el dashboard privado.</p>
-            <a class="button whatsapp" [href]="whatsappUrl" target="_blank" rel="noreferrer">
-              Enviar por WhatsApp
-            </a>
-          }
         </aside>
       </div>
     } @else {
