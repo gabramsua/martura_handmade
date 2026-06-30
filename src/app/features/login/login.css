@@ -87,3 +87,11 @@
   margin: 0;
   padding: 10px 12px;
 }
+
+.admin-hint {
+  background: var(--paper);
+  border-radius: 6px;
+  font-weight: 700;
+  margin: 0 0 14px;
+  padding: 10px 12px;
+}

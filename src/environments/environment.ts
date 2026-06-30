@@ -1,16 +1,17 @@
 export const environment = {
   production: false,
   firebase: {
-    enabled: false,
-    adminEmails: ['admin@martura.test'],
+    enabled: true,
+    adminEmails: ['gabramsua@gmail.com'],
     useEmulators: false,
     config: {
-      apiKey: '',
-      authDomain: '',
-      projectId: '',
-      storageBucket: '',
-      messagingSenderId: '',
-      appId: '',
+      apiKey: "AIzaSyB6_4iJHwKebbeXrVN0DECQemOkUGJlvjQ",
+      authDomain: "martura-handmade.firebaseapp.com",
+      projectId: "martura-handmade",
+      storageBucket: "martura-handmade.firebasestorage.app",
+      messagingSenderId: "559622225888",
+      appId: "1:559622225888:web:202ae07b9cbf6d81d2f585",
+      measurementId: "G-EJJWT5CDHT"
     },
     emulators: {
       authHost: '127.0.0.1',

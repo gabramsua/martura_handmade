@@ -5,11 +5,15 @@
     <h1>{{ requestedRole === 'admin' ? 'Acceso administrador' : 'Identificate para cerrar pedido' }}</h1>
     <p>
       @if (authMode === 'firebase') {
-        Este acceso ya esta preparado para Firebase Auth. Conecta tu configuracion y usa una cuenta de Google.
+        Este acceso ya esta conectado a Firebase Auth. Usa Google y, para admin, entra con el correo autorizado.
       } @else {
         Este login sigue en modo mock para validar el flujo del MVP antes de conectar proveedores reales.
       }
     </p>
+
+    @if (authMode === 'firebase' && requestedRole === 'admin') {
+      <p class="admin-hint">Admin autorizado: {{ adminEmail }}</p>
+    }
 
     @if (user$ | async; as user) {
       <div class="current-user">

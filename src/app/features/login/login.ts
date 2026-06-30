@@ -4,6 +4,7 @@ import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
 import { UserRole } from '../../core/models/user.model';
+import { environment } from '../../../environments/environment';
 import { AuthService } from '../../core/services/auth.service';
 
 @Component({
@@ -23,10 +24,11 @@ export class Login {
   readonly user$ = this.authService.user$;
   readonly requestedRole = (this.route.snapshot.queryParamMap.get('role') as UserRole | null) ?? 'customer';
   readonly returnUrl = this.route.snapshot.queryParamMap.get('returnUrl') ?? '/';
+  readonly adminEmail = environment.firebase.adminEmails[0] ?? '';
   readonly loginForm = this.formBuilder.nonNullable.group({
     name: [this.requestedRole === 'admin' ? 'Virginia Admin' : 'Cliente Martura', [Validators.required]],
     email: [
-      this.requestedRole === 'admin' ? 'admin@martura.test' : 'cliente@martura.test',
+      this.requestedRole === 'admin' ? this.adminEmail : 'cliente@martura.test',
       [Validators.required, Validators.email],
     ],
     role: [this.requestedRole, [Validators.required]],

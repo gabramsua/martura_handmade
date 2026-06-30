@@ -68,12 +68,16 @@ export class ProductsService {
 
     collectionData(productsQuery, { idField: 'id' }).subscribe({
       next: (products) => {
-        this.productsSubject.next(
-          (products as Array<Product & { createdAt: unknown }>).map((product) =>
-            reviveProduct(product),
-          ),
+        const nextProducts = (products as Array<Product & { createdAt: unknown }>).map((product) =>
+          reviveProduct(product),
         );
+
+        this.productsSubject.next(nextProducts);
         this.loadingSubject.next(false);
+
+        if (nextProducts.length === 0) {
+          void this.seedProductsIfEmpty();
+        }
       },
       error: () => {
         this.loadingSubject.next(false);
@@ -287,5 +291,19 @@ export class ProductsService {
 
   private getProductDoc(productId: string) {
     return doc(this.firestore!, firestoreCollections.products, productId);
+  }
+
+  private async seedProductsIfEmpty(): Promise<void> {
+    if (!this.firestore || this.productsSubject.value.length > 0) {
+      return;
+    }
+
+    const batch = writeBatch(this.firestore);
+
+    for (const product of MOCK_PRODUCTS) {
+      batch.set(this.getProductDoc(product.id), product);
+    }
+
+    await batch.commit();
   }
 }
