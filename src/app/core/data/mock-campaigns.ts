@@ -3,7 +3,7 @@ import { Campaign } from '../models/campaign.model';
 export const MOCK_CAMPAIGNS: Campaign[] = [
   {
     id: 'cmp-verano-2026',
-    name: 'Campana Verano 2026',
+    name: 'Campaña Verano 2026',
     badge: 'Verano',
     description: 'Seleccion de temporada con descuento suave para piezas ligeras y de viaje.',
     discountType: 'percentage',
@@ -16,7 +16,7 @@ export const MOCK_CAMPAIGNS: Campaign[] = [
     id: 'cmp-vuelta-taller-2026',
     name: 'Vuelta al Taller',
     badge: 'Septiembre',
-    description: 'Campana preparada para la siguiente temporada.',
+    description: 'Campaña preparada para la siguiente temporada.',
     discountType: 'fixed',
     discountValue: 6,
     active: false,

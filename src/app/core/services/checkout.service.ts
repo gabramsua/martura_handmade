@@ -37,27 +37,26 @@ export class CheckoutService {
           `- ${item.quantity} x ${item.productName} (${item.variant}) - ${this.formatCurrency(item.lineTotal)}`,
       )
       .join('\n');
-    const notes = order.customer.notes ? `\nNotas: ${order.customer.notes}` : '';
     const deliveryBlock = order.customer.deliveryMethod === 'pickup'
       ? 'Entrega: Recogida en taller'
       : [
-          'Entrega: Envio',
-          `Direccion: ${order.customer.addressLine1 ?? 'Sin direccion'}`,
+          'Entrega: Envío',
+          `Dirección: ${order.customer.addressLine1 ?? 'Sin dirección'}`,
           `CP y ciudad: ${order.customer.postalCode} ${order.customer.city}`,
           `Provincia: ${order.customer.province}`,
         ].join('\n');
     const message = [
-      '*Nuevo Pedido - Martura Handmade*',
+      '*Nuevo pedido - Martura Handmade*',
       `Cliente: ${order.customer.name}`,
-      `Telefono: ${order.customer.phone}`,
+      `Teléfono: ${order.customer.phone}`,
       `Email: ${order.customer.email}`,
       deliveryBlock,
-      notes ? `Notas: ${order.customer.notes}` : null,
+      order.customer.notes ? `Notas: ${order.customer.notes}` : null,
       '-------------------------',
       items,
       '-------------------------',
       `Subtotal: ${this.formatCurrency(order.subtotal)}`,
-      `Envio: ${this.formatCurrency(order.shipping)}`,
+      `Envío: ${this.formatCurrency(order.shipping)}`,
       `*Total: ${this.formatCurrency(order.total)}*`,
     ]
       .filter((line): line is string => !!line)

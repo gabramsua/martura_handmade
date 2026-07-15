@@ -1,0 +1,58 @@
+{
+  "endpoints": {
+    "seedDemoCatalog": {
+      "availableMemoryMb": null,
+      "timeoutSeconds": null,
+      "minInstances": null,
+      "maxInstances": 10,
+      "ingressSettings": null,
+      "concurrency": null,
+      "serviceAccountEmail": null,
+      "vpc": null,
+      "platform": "gcfv2",
+      "region": [
+        "europe-west1"
+      ],
+      "labels": {},
+      "callableTrigger": {},
+      "entryPoint": "seedDemoCatalog"
+    },
+    "createOrder": {
+      "availableMemoryMb": null,
+      "timeoutSeconds": null,
+      "minInstances": null,
+      "maxInstances": 10,
+      "ingressSettings": null,
+      "concurrency": null,
+      "serviceAccountEmail": null,
+      "vpc": null,
+      "platform": "gcfv2",
+      "region": [
+        "europe-west1"
+      ],
+      "labels": {},
+      "callableTrigger": {},
+      "entryPoint": "createOrder"
+    },
+    "updateOrderStatus": {
+      "availableMemoryMb": null,
+      "timeoutSeconds": null,
+      "minInstances": null,
+      "maxInstances": 10,
+      "ingressSettings": null,
+      "concurrency": null,
+      "serviceAccountEmail": null,
+      "vpc": null,
+      "platform": "gcfv2",
+      "region": [
+        "europe-west1"
+      ],
+      "labels": {},
+      "callableTrigger": {},
+      "entryPoint": "updateOrderStatus"
+    }
+  },
+  "specVersion": "v1alpha1",
+  "requiredAPIs": [],
+  "extensions": {}
+}

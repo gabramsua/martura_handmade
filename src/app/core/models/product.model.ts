@@ -6,6 +6,7 @@ export interface Product {
   id: string;
   name: string;
   slug: string;
+  position: number;
   description: string;
   story: string;
   originalPrice: number;
@@ -20,7 +21,7 @@ export interface Product {
   sizes: string[];
   colors: string[];
   pricingMode: ProductPricingMode;
-  campaignId: string | null;
+  campaignIds: string[];
   featured: boolean;
   status: ProductStatus;
   createdAt: Date;
@@ -62,12 +63,25 @@ export function isProductAvailable(product: Pick<Product, 'status' | 'stock'>): 
   return product.status === 'active' && product.stock > 0;
 }
 
-export function normalizePricingMode(product: Pick<Product, 'pricingMode' | 'offerPrice' | 'campaignId'>): ProductPricingMode {
+export function normalizeProductCampaignIds(
+  product: Partial<Pick<Product, 'campaignIds'>> & { campaignId?: string | null | undefined },
+): string[] {
+  const explicitCampaignIds = Array.isArray(product.campaignIds)
+    ? product.campaignIds.filter((campaignId): campaignId is string => typeof campaignId === 'string')
+    : [];
+  const legacyCampaignId = typeof product.campaignId === 'string' ? product.campaignId.trim() : '';
+
+  return Array.from(new Set([...explicitCampaignIds, legacyCampaignId].map((campaignId) => campaignId.trim()).filter(Boolean)));
+}
+
+export function normalizePricingMode(
+  product: Pick<Product, 'pricingMode' | 'offerPrice' | 'campaignIds'> & { campaignId?: string | null },
+): ProductPricingMode {
   if (product.pricingMode) {
     return product.pricingMode;
   }
 
-  if (product.campaignId && product.campaignId !== 'cmp-manual') {
+  if (normalizeProductCampaignIds(product).length > 0) {
     return 'campaign';
   }
 

@@ -22,11 +22,26 @@ service cloud.firestore {
       allow create, update, delete: if isAdmin();
     }
 
+    match /productCategories/{categoryId} {
+      allow read: if isAdmin();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /productCollections/{collectionId} {
+      allow read: if isAdmin();
+      allow create, update, delete: if isAdmin();
+    }
+
     match /orders/{orderId} {
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
       allow read: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
-      allow update: if isAdmin();
+      allow create: if false;
+      allow update: if false;
       allow delete: if isAdmin();
+    }
+
+    match /customers/{customerId} {
+      allow read: if isAdmin() || (isSignedIn() && customerId == request.auth.uid);
+      allow create, update, delete: if isAdmin();
     }
   }
 }

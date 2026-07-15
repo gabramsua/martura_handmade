@@ -5,18 +5,29 @@ import {
   collectionData,
   deleteDoc,
   doc,
+  getDocs,
   orderBy,
   query,
   runTransaction,
-  setDoc,
+  where,
   writeBatch,
 } from '@angular/fire/firestore';
-import { BehaviorSubject, map } from 'rxjs';
+import { FirebaseError } from 'firebase/app';
+import { BehaviorSubject, catchError, map, of, switchMap } from 'rxjs';
 
-import { CheckoutOrder, isOrderActive, OrderStatus } from '../models/order.model';
+import {
+  CheckoutOrder,
+  isOrderActive,
+  OrderStatus,
+  SerializedCheckoutOrder,
+  UpdateOrderStatusPayload,
+} from '../models/order.model';
 import { firestoreCollections, isFirebaseConfigured } from '../firebase/firebase.config';
+import { getMarturaFunctions } from '../firebase/firebase.lazy';
 import { reviveOrder } from '../firebase/firestore.mappers';
+import { AppUser } from '../models/user.model';
 import { isProductVisible, normalizeProductStatus, ProductStatus } from '../models/product.model';
+import { AuthService } from './auth.service';
 import { LocalStorageService } from './local-storage.service';
 import { ProductsService } from './products.service';
 
@@ -25,35 +36,21 @@ const ORDERS_STORAGE_KEY = 'martura_orders';
 @Injectable({ providedIn: 'root' })
 export class OrdersService {
   private readonly firestore = inject(Firestore, { optional: true });
+  private readonly authService = inject(AuthService);
   private readonly localStorageService = inject(LocalStorageService);
   private readonly productsService = inject(ProductsService);
   private readonly ordersSubject = new BehaviorSubject<CheckoutOrder[]>(
     this.readInitialOrders(),
   );
 
-  readonly orders$ = this.ordersSubject.asObservable();
+  readonly orders$ = isFirebaseConfigured && this.firestore
+    ? this.authService.user$.pipe(
+        switchMap((user) => this.getRemoteOrders(user)),
+      )
+    : this.ordersSubject.asObservable();
   readonly pendingOrders$ = this.orders$.pipe(
     map((orders) => orders.filter((order) => isOrderActive(order.status))),
   );
-
-  constructor() {
-    if (!isFirebaseConfigured || !this.firestore) {
-      return;
-    }
-
-    const ordersCollection = collection(this.firestore, firestoreCollections.orders);
-    const ordersQuery = query(ordersCollection, orderBy('createdAt', 'desc'));
-
-    collectionData(ordersQuery, { idField: 'id' }).subscribe({
-      next: (orders) => {
-        this.ordersSubject.next(
-          (orders as Array<CheckoutOrder & { createdAt: unknown }>).map((order) =>
-            reviveOrder(order),
-          ),
-        );
-      },
-    });
-  }
 
   getOrdersForUser(userId: string | null) {
     return this.orders$.pipe(
@@ -62,15 +59,21 @@ export class OrdersService {
   }
 
   async saveDraft(order: CheckoutOrder): Promise<void> {
-    if (isFirebaseConfigured && this.firestore) {
-      await setDoc(this.getOrderDoc(order.id), order);
-      return;
-    }
-
     this.setOrders([order, ...this.ordersSubject.value]);
   }
 
   async updateStatus(orderId: string, status: OrderStatus): Promise<void> {
+    if (isFirebaseConfigured) {
+      const functions = await getMarturaFunctions();
+
+      if (!functions) {
+        throw new Error('Firebase Functions no está disponible en la app. Revisa la configuración.');
+      }
+
+      await this.updateStatusWithFunction(functions, orderId, status);
+      return;
+    }
+
     const order = this.ordersSubject.value.find((entry) => entry.id === orderId);
 
     if (!order) {
@@ -82,11 +85,6 @@ export class OrdersService {
     }
 
     const updatedAt = new Date();
-
-    if (isFirebaseConfigured && this.firestore) {
-      await this.updateStatusInFirestore(orderId, status, updatedAt);
-      return;
-    }
 
     if (this.shouldReleaseInventory(order.status, status)) {
       await this.productsService.releaseOrder(order.items);
@@ -106,9 +104,17 @@ export class OrdersService {
   async clearOrders(): Promise<void> {
     if (isFirebaseConfigured && this.firestore) {
       const batch = writeBatch(this.firestore);
+      const ordersCollection = collection(this.firestore, firestoreCollections.orders);
+      const customersCollection = collection(this.firestore, firestoreCollections.customers);
+      const snapshot = await getDocs(ordersCollection);
+      const customersSnapshot = await getDocs(customersCollection);
 
-      for (const order of this.ordersSubject.value) {
-        batch.delete(this.getOrderDoc(order.id));
+      for (const order of snapshot.docs) {
+        batch.delete(order.ref);
+      }
+
+      for (const customer of customersSnapshot.docs) {
+        batch.delete(customer.ref);
       }
 
       await batch.commit();
@@ -123,6 +129,36 @@ export class OrdersService {
     this.localStorageService.write(ORDERS_STORAGE_KEY, orders);
   }
 
+  private getRemoteOrders(user: AppUser | null) {
+    if (!this.firestore || !user) {
+      return of<CheckoutOrder[]>([]);
+    }
+
+    const ordersCollection = collection(this.firestore, firestoreCollections.orders);
+    const ordersQuery = user.role === 'admin'
+      ? query(ordersCollection, orderBy('createdAt', 'desc'))
+      : query(
+          ordersCollection,
+          where('userId', '==', user.id),
+        );
+
+    return collectionData(ordersQuery, { idField: 'id' }).pipe(
+      map((orders) =>
+        this.sortOrdersByCreatedAt(
+          (orders as Array<SerializedCheckoutOrder>).map((order) => reviveOrder(order)),
+        ),
+      ),
+      catchError((error) => {
+        console.error('No se pudieron cargar los pedidos desde Firestore.', error);
+        return of<CheckoutOrder[]>([]);
+      }),
+    );
+  }
+
+  private sortOrdersByCreatedAt(orders: CheckoutOrder[]): CheckoutOrder[] {
+    return [...orders].sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime());
+  }
+
   private readInitialOrders(): CheckoutOrder[] {
     if (isFirebaseConfigured) {
       return [];
@@ -135,6 +171,23 @@ export class OrdersService {
 
   private getOrderDoc(orderId: string) {
     return doc(this.firestore!, firestoreCollections.orders, orderId);
+  }
+
+  private async updateStatusWithFunction(
+    functions: NonNullable<Awaited<ReturnType<typeof getMarturaFunctions>>>,
+    orderId: string,
+    status: OrderStatus,
+  ): Promise<void> {
+    try {
+      const { httpsCallable } = await import('firebase/functions');
+      const updateOrderStatus = httpsCallable<UpdateOrderStatusPayload, SerializedCheckoutOrder>(
+        functions,
+        'updateOrderStatus',
+      );
+      await updateOrderStatus({ orderId, status });
+    } catch (error) {
+      throw this.mapFunctionsError(error);
+    }
   }
 
   private async updateStatusInFirestore(
@@ -243,5 +296,31 @@ export class OrdersService {
       quantities.set(item.productId, (quantities.get(item.productId) ?? 0) + item.quantity);
       return quantities;
     }, new Map<string, number>());
+  }
+
+  private mapFunctionsError(error: unknown): Error {
+    const code =
+      error instanceof FirebaseError
+        ? error.code
+        : typeof error === 'object' && error && 'code' in error
+          ? String(error.code)
+          : null;
+    const message =
+      typeof error === 'object' && error && 'message' in error
+        ? String(error.message)
+        : null;
+
+    switch (code) {
+      case 'functions/permission-denied':
+        return new Error('Tu cuenta no puede gestionar pedidos desde este panel.');
+      case 'functions/failed-precondition':
+      case 'functions/not-found':
+      case 'functions/invalid-argument':
+        return new Error(message ?? 'No se pudo actualizar el pedido con el estado solicitado.');
+      default:
+        return error instanceof Error && error.message
+          ? error
+          : new Error('No se pudo actualizar el pedido desde Firebase Functions.');
+    }
   }
 }

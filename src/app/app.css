@@ -52,16 +52,46 @@
 .main-nav {
   align-items: center;
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
 .main-nav a,
+.session-label,
+.session-role,
 .session-button,
 .cart-link {
   border-radius: 999px;
   color: var(--muted);
   font-weight: 700;
   padding: 10px 14px;
+}
+
+.session-label {
+  color: var(--ink);
+  display: grid;
+  gap: 2px;
+  line-height: 1.1;
+}
+
+.session-label strong,
+.session-label small {
+  display: block;
+}
+
+.session-label small {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.session-role {
+  background: var(--sand);
+  color: var(--rose-dark);
+  font-size: 0.78rem;
+  font-weight: 900;
+  text-decoration: none;
+  text-transform: uppercase;
 }
 
 .main-nav a.active,
@@ -74,6 +104,8 @@
 
 .session-button {
   background: transparent;
+  border: 0;
+  cursor: pointer;
   min-height: 0;
 }
 

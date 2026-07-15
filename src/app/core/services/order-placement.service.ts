@@ -1,21 +1,17 @@
 import { Injectable, inject } from '@angular/core';
-import {
-  Firestore,
-  doc,
-  runTransaction,
-} from '@angular/fire/firestore';
+import { FirebaseError } from 'firebase/app';
 
 import { CartSummary } from '../models/cart.model';
-import { isProductVisible, normalizeProductStatus, ProductStatus } from '../models/product.model';
-import { CheckoutOrder, CustomerContact } from '../models/order.model';
-import { firestoreCollections, isFirebaseConfigured } from '../firebase/firebase.config';
+import { CreateOrderPayload, CustomerContact, SerializedCheckoutOrder } from '../models/order.model';
+import { isFirebaseConfigured } from '../firebase/firebase.config';
+import { getMarturaFunctions } from '../firebase/firebase.lazy';
+import { reviveOrder } from '../firebase/firestore.mappers';
 import { CheckoutService } from './checkout.service';
 import { OrdersService } from './orders.service';
 import { ProductsService } from './products.service';
 
 @Injectable({ providedIn: 'root' })
 export class OrderPlacementService {
-  private readonly firestore = inject(Firestore, { optional: true });
   private readonly checkoutService = inject(CheckoutService);
   private readonly ordersService = inject(OrdersService);
   private readonly productsService = inject(ProductsService);
@@ -24,13 +20,18 @@ export class OrderPlacementService {
     summary: CartSummary,
     customer: CustomerContact,
     userId: string,
-  ): Promise<CheckoutOrder> {
-    const order = this.checkoutService.buildOrder(summary, customer, userId);
+  ) {
+    if (isFirebaseConfigured) {
+      const functions = await getMarturaFunctions();
 
-    if (isFirebaseConfigured && this.firestore) {
-      await this.placeOrderInFirestore(order);
-      return order;
+      if (!functions) {
+        throw new Error('Firebase Functions no está disponible en la app. Revisa la configuración.');
+      }
+
+      return this.placeOrderWithFunction(functions, customer, summary);
     }
+
+    const order = this.checkoutService.buildOrder(summary, customer, userId);
 
     const stockValidation = this.productsService.validateCartItems(summary.items);
 
@@ -44,43 +45,69 @@ export class OrderPlacementService {
     return order;
   }
 
-  private async placeOrderInFirestore(order: CheckoutOrder): Promise<void> {
-    const firestore = this.firestore!;
+  private async placeOrderWithFunction(
+    functions: NonNullable<Awaited<ReturnType<typeof getMarturaFunctions>>>,
+    customer: CustomerContact,
+    summary: CartSummary,
+  ) {
+    try {
+      const { httpsCallable } = await import('firebase/functions');
+      const createOrder = httpsCallable<CreateOrderPayload, SerializedCheckoutOrder>(
+        functions,
+        'createOrder',
+      );
+      const result = await createOrder({
+        customer,
+        items: summary.items.map((item) => ({
+          productId: item.product.id,
+          quantity: item.quantity,
+          variant: item.variant,
+        })),
+      });
 
-    await runTransaction(firestore, async (transaction) => {
-      for (const item of order.items) {
-        const productDoc = doc(firestore, firestoreCollections.products, item.productId);
-        const productSnapshot = await transaction.get(productDoc);
+      return reviveOrder(result.data);
+    } catch (error) {
+      throw this.mapFunctionsError(error);
+    }
+  }
 
-        if (!productSnapshot.exists()) {
-          throw new Error(`La pieza "${item.productName}" ya no esta disponible.`);
+  private mapFunctionsError(error: unknown): Error {
+    const code =
+      error instanceof FirebaseError
+        ? error.code
+        : typeof error === 'object' && error && 'code' in error
+          ? String(error.code)
+          : null;
+    const message =
+      typeof error === 'object' && error && 'message' in error
+        ? String(error.message)
+        : null;
+
+    switch (code) {
+      case 'functions/unauthenticated':
+        return new Error('Debes iniciar sesión para cerrar el pedido.');
+      case 'functions/permission-denied':
+        return new Error('No hemos podido validar tus permisos para crear el pedido. Cierra sesión y vuelve a entrar.');
+      case 'functions/failed-precondition':
+      case 'functions/not-found':
+      case 'functions/invalid-argument':
+        return new Error(message ?? 'El pedido no se pudo validar con los datos actuales.');
+      case 'functions/deadline-exceeded':
+        return new Error('La creación del pedido está tardando demasiado. Espera unos segundos y vuelve a intentarlo.');
+      case 'functions/unavailable':
+        return new Error('No hemos podido contactar con el servidor de pedidos. Revisa tu conexión y vuelve a probar.');
+      case 'functions/internal':
+        return new Error(
+          message?.includes('CORS')
+            ? 'La app no ha podido completar la petición al servidor de pedidos. Revisa la configuración de Firebase Functions y vuelve a intentarlo.'
+            : 'El servidor de pedidos ha devuelto un error interno. Si vuelve a pasar, revisa Firebase Functions y sus logs.',
+        );
+      default:
+        if (error instanceof Error && error.message) {
+          return new Error(error.message.replace(/^FirebaseError:\s*/i, '').trim());
         }
 
-        const product = productSnapshot.data() as {
-          stock?: number;
-          status?: ProductStatus;
-        };
-        const currentStock = typeof product.stock === 'number' ? product.stock : 0;
-        const currentStatus = normalizeProductStatus(product.status, currentStock);
-
-        if (!isProductVisible({ status: currentStatus })) {
-          throw new Error(`La pieza "${item.productName}" ya no esta disponible.`);
-        }
-
-        if (currentStock < item.quantity) {
-          throw new Error(`Solo quedan ${currentStock} unidades de "${item.productName}".`);
-        }
-
-        const nextStock = currentStock - item.quantity;
-
-        transaction.update(productDoc, {
-          stock: nextStock,
-          status: normalizeProductStatus(currentStatus, nextStock),
-        });
-      }
-
-      const orderDoc = doc(firestore, firestoreCollections.orders, order.id);
-      transaction.set(orderDoc, order);
-    });
+        return new Error('No se pudo crear el pedido desde Firebase Functions.');
+    }
   }
 }

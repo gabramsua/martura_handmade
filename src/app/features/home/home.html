@@ -1,21 +1,25 @@
 <section class="hero">
   <div class="hero-copy">
-    <p class="eyebrow">Nueva coleccion artesanal</p>
+    <p class="eyebrow">Nueva colección artesanal</p>
     <h1>Martura Handmade</h1>
     <p>
-      Bolsos, neceseres y accesorios textiles hechos a mano en pequenas series,
+      Bolsos, neceseres y accesorios textiles hechos a mano en pequeñas series,
       con tejidos escogidos y acabados pensados para el uso diario.
     </p>
     <div class="hero-actions">
-      <a class="button primary" href="#catalogo">Ver catalogo</a>
-      <a class="button ghost" routerLink="/admin">Panel privado</a>
+      <a class="button primary" href="#catalogo">Ver catálogo</a>
+      @if (showAdminAccess$ | async) {
+        <a class="button ghost" routerLink="/admin">Panel privado</a>
+      } @else {
+        <a class="button ghost" routerLink="/pedidos">Mis pedidos</a>
+      }
     </div>
   </div>
 </section>
 
 <section class="featured-section">
   <div class="section-heading">
-    <p class="eyebrow">Seleccion destacada</p>
+    <p class="eyebrow">Selección destacada</p>
     <h2>Piezas listas para salir del taller</h2>
   </div>
 
@@ -35,100 +39,122 @@
 
 <section class="catalog-section" id="catalogo">
   <div class="catalog-toolbar">
-    <div>
-      <p class="eyebrow">Catalogo</p>
+    <div class="catalog-heading">
+      <p class="eyebrow">Catálogo</p>
       <h2>Compra por pieza</h2>
+      <p class="catalog-summary">
+        {{ filteredCount$ | async }} pieza(s) visibles de {{ catalogCount$ | async }}
+      </p>
     </div>
 
     @if (filters$ | async; as filters) {
-      <div class="filters" aria-label="Filtros de catalogo">
-        <input
-          type="search"
-          placeholder="Buscar bolsos, fundas..."
-          [value]="filters.query"
-          (input)="updateQuery($any($event.target).value)"
-        />
+      <div class="filters-panel" aria-label="Filtros de catálogo">
+        <div class="filters-grid">
+          <label class="search-field">
+            <span>Buscar</span>
+            <input
+              type="search"
+              placeholder="Buscar bolsos, fundas..."
+              [value]="filters.query"
+              (input)="updateQuery($any($event.target).value)"
+            />
+          </label>
 
-        <button type="button" [class.selected]="!filters.categorySlug" (click)="selectCategory(null)">
-          Todo
-        </button>
-        @for (category of categories$ | async; track category.slug) {
-          <button
-            type="button"
-            [class.selected]="filters.categorySlug === category.slug"
-            (click)="selectCategory(category.slug)"
-          >
-            {{ category.name }}
-          </button>
-        }
+          <label class="select-field">
+            <span>Categoría</span>
+            <select [value]="filters.categorySlug ?? ''" (change)="selectCategory($any($event.target).value || null)">
+              <option value="">Todas</option>
+              @for (category of categories$ | async; track category.slug) {
+                <option [value]="category.slug">{{ category.name }}</option>
+              }
+            </select>
+          </label>
 
-        <div class="collection-filter-group">
-          <span>Colecciones</span>
-          <button type="button" [class.selected]="!filters.collectionSlug" (click)="selectCollection(null)">
-            Todas
-          </button>
-          @for (collection of collections$ | async; track collection.slug) {
-            <button
-              type="button"
-              [class.selected]="filters.collectionSlug === collection.slug"
-              (click)="selectCollection(collection.slug)"
-            >
-              {{ collection.name }}
+          <label class="select-field">
+            <span>Colección</span>
+            <select [value]="filters.collectionSlug ?? ''" (change)="selectCollection($any($event.target).value || null)">
+              <option value="">Todas</option>
+              @for (collection of collections$ | async; track collection.slug) {
+                <option [value]="collection.slug">{{ collection.name }}</option>
+              }
+            </select>
+          </label>
+
+          <label class="select-field compact">
+            <span>Ordenar</span>
+            <select [value]="filters.sortBy" (change)="sortCatalog($any($event.target).value)">
+              @for (option of sortOptions; track option.value) {
+                <option [value]="option.value">{{ option.label }}</option>
+              }
+            </select>
+          </label>
+        </div>
+
+        <div class="filters-meta">
+          <label class="offer-toggle">
+            <input
+              type="checkbox"
+              [checked]="filters.onlyOffers"
+              (change)="toggleOffers($any($event.target).checked)"
+            />
+            Solo promociones
+          </label>
+
+          @if (hasActiveFilters(filters)) {
+            <button type="button" class="clear-filters" (click)="clearFilters()">
+              Limpiar filtros
             </button>
           }
         </div>
-
-        <label class="offer-toggle">
-          <input
-            type="checkbox"
-            [checked]="filters.onlyOffers"
-            (change)="toggleOffers($any($event.target).checked)"
-          />
-          Ofertas
-        </label>
-
-        <label class="sort-select">
-          <span>Ordenar</span>
-          <select [value]="filters.sortBy" (change)="sortCatalog($any($event.target).value)">
-            @for (option of sortOptions; track option.value) {
-              <option [value]="option.value">{{ option.label }}</option>
-            }
-          </select>
-        </label>
       </div>
     }
   </div>
 
-  <div class="product-grid">
-    @for (product of filteredProducts$ | async; track product.id) {
-      <article class="product-card">
-        <a [routerLink]="['/producto', product.slug]" class="product-image">
-          <img [src]="product.imageUrl" [alt]="product.name" />
-          @if (getBadgeLabel(product); as badgeLabel) {
-            <span [class.sold-out-badge]="product.status === 'sold_out'">{{ badgeLabel }}</span>
-          }
-        </a>
-        <div class="product-content">
-          <p>{{ getTaxonomyLabel(product) }}</p>
-          <h3>{{ product.name }}</h3>
-          <p>{{ product.description }}</p>
-          <div class="product-footer">
-            <div class="price-stack">
-              <strong>
-                {{ getCurrentPrice(product) | currency: 'EUR' : 'symbol' : '1.0-0' : 'es' }}
-              </strong>
-              @if (getComparePrice(product); as comparePrice) {
-                <span>{{ comparePrice | currency: 'EUR' : 'symbol' : '1.0-0' : 'es' }}</span>
+  @if (loading$ | async) {
+    <mat-progress-bar mode="indeterminate"></mat-progress-bar>
+    <p class="empty-state">Cargando catálogo...</p>
+  } @else {
+    <div class="product-grid">
+      @for (product of filteredProducts$ | async; track product.id) {
+        <article class="product-card">
+          <a [routerLink]="['/producto', product.slug]" class="product-image">
+            <img [src]="product.imageUrl" [alt]="product.name" />
+            @if (getBadgeLabel(product); as badgeLabel) {
+              <span [class.sold-out-badge]="product.status === 'sold_out'">{{ badgeLabel }}</span>
+            }
+          </a>
+          <div class="product-content">
+            <p>{{ getTaxonomyLabel(product) }}</p>
+            <h3>{{ product.name }}</h3>
+            <p>{{ product.description }}</p>
+            @if (getCampaignSummary(product); as campaignSummary) {
+              <p class="campaign-summary">{{ campaignSummary }}</p>
+            }
+            <div class="product-footer">
+              <div class="price-stack">
+                <strong>
+                  {{ getCurrentPrice(product) | currency: 'EUR' : 'symbol' : '1.0-0' : 'es' }}
+                </strong>
+                @if (getComparePrice(product); as comparePrice) {
+                  <span>{{ comparePrice | currency: 'EUR' : 'symbol' : '1.0-0' : 'es' }}</span>
+                }
+              </div>
+              @if (isAdmin$ | async) {
+                <a class="product-action-link" routerLink="/admin">Gestionar</a>
+              } @else {
+                <button type="button" [disabled]="!isAvailable(product)" (click)="addToCart(product)">
+                  {{ isAvailable(product) ? 'Añadir' : 'Agotado' }}
+                </button>
               }
             </div>
-            <button type="button" [disabled]="!isAvailable(product)" (click)="addToCart(product)">
-              {{ isAvailable(product) ? 'Anadir' : 'Agotado' }}
-            </button>
           </div>
+        </article>
+      } @empty {
+        <div class="empty-state">
+          <p>No hay piezas con esos filtros.</p>
+          <button type="button" class="button ghost" (click)="clearFilters()">Ver todo el catálogo</button>
         </div>
-      </article>
-    } @empty {
-      <p class="empty-state">No hay piezas con esos filtros.</p>
-    }
-  </div>
+      }
+    </div>
+  }
 </section>

@@ -1,9 +1,22 @@
 import { Campaign } from '../models/campaign.model';
+import { CustomerProfile } from '../models/customer.model';
 import { CheckoutOrder, normalizeOrderStatus } from '../models/order.model';
-import { normalizePricingMode, normalizeProductStatus, Product } from '../models/product.model';
+import {
+  normalizePricingMode,
+  normalizeProductCampaignIds,
+  normalizeProductStatus,
+  Product,
+} from '../models/product.model';
+import { CatalogTaxonomy } from '../models/taxonomy.model';
 
 type WithUnknownDate<T> = Omit<T, 'createdAt'> & {
   createdAt: unknown;
+};
+
+type WithUnknownProductDate = Omit<Product, 'createdAt' | 'campaignIds'> & {
+  createdAt: unknown;
+  campaignIds?: unknown;
+  campaignId?: unknown;
 };
 
 type WithUnknownOrderDates = Omit<CheckoutOrder, 'createdAt' | 'updatedAt'> & {
@@ -11,13 +24,45 @@ type WithUnknownOrderDates = Omit<CheckoutOrder, 'createdAt' | 'updatedAt'> & {
   updatedAt?: unknown;
 };
 
-export function reviveProduct(product: WithUnknownDate<Product>): Product {
+type WithUnknownCustomerDates = Omit<CustomerProfile, 'createdAt' | 'updatedAt' | 'lastOrderAt'> & {
+  createdAt: unknown;
+  updatedAt: unknown;
+  lastOrderAt?: unknown;
+};
+
+type WithUnknownTaxonomyDates = Omit<CatalogTaxonomy, 'createdAt' | 'updatedAt'> & {
+  createdAt: unknown;
+  updatedAt: unknown;
+};
+
+export function reviveProduct(product: WithUnknownProductDate): Product {
+  const campaignIds = normalizeProductCampaignIds({
+    campaignIds: Array.isArray(product.campaignIds) ? product.campaignIds : [],
+    campaignId: typeof product.campaignId === 'string' ? product.campaignId : null,
+  });
+  const gallery =
+    Array.isArray(product.gallery) && product.gallery.length > 0
+      ? product.gallery.filter((image): image is string => typeof image === 'string' && image.trim().length > 0)
+      : [];
+  const imageUrl =
+    typeof product.imageUrl === 'string' && product.imageUrl.trim().length > 0
+      ? product.imageUrl
+      : gallery[0] ?? '';
+
   return {
     ...product,
-    gallery: Array.isArray(product.gallery) && product.gallery.length > 0 ? product.gallery : [product.imageUrl],
+    imageUrl,
+    gallery: gallery.length > 0 ? gallery : imageUrl ? [imageUrl] : [],
     collection: product.collection ?? null,
     collectionSlug: product.collectionSlug ?? null,
-    pricingMode: normalizePricingMode(product),
+    campaignIds,
+    position: typeof product.position === 'number' ? product.position : 0,
+    pricingMode: normalizePricingMode({
+      pricingMode: product.pricingMode,
+      offerPrice: product.offerPrice ?? null,
+      campaignIds,
+      campaignId: typeof product.campaignId === 'string' ? product.campaignId : null,
+    }),
     status: normalizeProductStatus(product.status, typeof product.stock === 'number' ? product.stock : 0),
     createdAt: normalizeDate(product.createdAt),
   };
@@ -53,6 +98,39 @@ export function reviveCampaign(
   };
 }
 
+export function reviveCustomerProfile(customer: WithUnknownCustomerDates): CustomerProfile {
+  return {
+    ...customer,
+    phone: customer.phone ?? null,
+    deliveryMethodPreference: customer.deliveryMethodPreference === 'pickup'
+      ? 'pickup'
+      : customer.deliveryMethodPreference === 'shipping'
+        ? 'shipping'
+        : null,
+    addressLine1: customer.addressLine1 ?? null,
+    postalCode: customer.postalCode ?? '',
+    city: customer.city ?? '',
+    province: customer.province ?? '',
+    notes: customer.notes ?? null,
+    totalOrders: typeof customer.totalOrders === 'number' ? customer.totalOrders : 0,
+    totalSpent: typeof customer.totalSpent === 'number' ? customer.totalSpent : 0,
+    lastOrderId: customer.lastOrderId ?? null,
+    lastOrderStatus: normalizeNullableOrderStatus(customer.lastOrderStatus),
+    lastOrderAt: normalizeNullableDate(customer.lastOrderAt),
+    createdAt: normalizeDate(customer.createdAt),
+    updatedAt: normalizeDate(customer.updatedAt),
+  };
+}
+
+export function reviveTaxonomy(taxonomy: WithUnknownTaxonomyDates): CatalogTaxonomy {
+  return {
+    ...taxonomy,
+    position: typeof taxonomy.position === 'number' ? taxonomy.position : 0,
+    createdAt: normalizeDate(taxonomy.createdAt),
+    updatedAt: normalizeDate(taxonomy.updatedAt),
+  };
+}
+
 function normalizeDate(value: unknown): Date {
   if (value instanceof Date) {
     return value;
@@ -80,4 +158,12 @@ function normalizeNullableDate(value: unknown): Date | null {
   }
 
   return normalizeDate(value);
+}
+
+function normalizeNullableOrderStatus(value: unknown) {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+
+  return normalizeOrderStatus(String(value));
 }

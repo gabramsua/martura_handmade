@@ -1,5 +1,7 @@
 import { AsyncPipe, CurrencyPipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { MatProgressBarModule } from '@angular/material/progress-bar';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import {
   AbstractControl,
   FormBuilder,
@@ -13,6 +15,7 @@ import { map } from 'rxjs';
 import { CartItem, CartSummary } from '../../core/models/cart.model';
 import { CheckoutOrder } from '../../core/models/order.model';
 import { resolveProductPricing } from '../../core/utils/product-pricing';
+import { AlertsService } from '../../core/services/alerts.service';
 import { AuthService } from '../../core/services/auth.service';
 import { CampaignsService } from '../../core/services/campaigns.service';
 import { CartService } from '../../core/services/cart.service';
@@ -21,13 +24,21 @@ import { OrderPlacementService } from '../../core/services/order-placement.servi
 
 @Component({
   selector: 'app-checkout',
-  imports: [AsyncPipe, CurrencyPipe, ReactiveFormsModule, RouterLink],
+  imports: [
+    AsyncPipe,
+    CurrencyPipe,
+    MatProgressBarModule,
+    MatProgressSpinnerModule,
+    ReactiveFormsModule,
+    RouterLink,
+  ],
   templateUrl: './checkout.html',
   styleUrl: './checkout.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class Checkout {
   private readonly formBuilder = inject(FormBuilder);
+  private readonly alertsService = inject(AlertsService);
   private readonly authService = inject(AuthService);
   private readonly campaignsService = inject(CampaignsService);
   private readonly cartService = inject(CartService);
@@ -54,6 +65,7 @@ export class Checkout {
   lastOrder: CheckoutOrder | null = null;
   whatsappUrl: string | null = null;
   errorMessage: string | null = null;
+  submissionMessage: string | null = null;
   isSubmitting = false;
 
   constructor() {
@@ -68,13 +80,23 @@ export class Checkout {
   }
 
   async prepareOrder(summary: CartSummary): Promise<void> {
+    if (!summary.items.length) {
+      this.errorMessage = 'Tu carrito está vacío. Añade al menos una pieza antes de cerrar el pedido.';
+      await this.alertsService.error('Carrito vacío', this.errorMessage);
+      return;
+    }
+
     if (this.checkoutForm.invalid) {
+      this.errorMessage = this.getCheckoutValidationMessage();
       this.checkoutForm.markAllAsTouched();
+      await this.alertsService.error('Revisa el pedido', this.errorMessage);
       return;
     }
 
     try {
       this.isSubmitting = true;
+      this.errorMessage = null;
+      this.submissionMessage = 'Validando stock y preparando tu pedido...';
       const value = this.checkoutForm.getRawValue();
 
       const order = await this.orderPlacementService.placeOrder(
@@ -95,14 +117,22 @@ export class Checkout {
         this.authService.currentUser?.id ?? 'mock-user',
       );
 
-      this.errorMessage = null;
+      this.submissionMessage = 'Preparando la confirmación y el mensaje de WhatsApp...';
       this.lastOrder = order;
       this.whatsappUrl = this.checkoutService.buildWhatsappUrl(order);
       this.cartService.clear();
-    } catch {
-      this.errorMessage = 'No se pudo guardar el pedido. Intentalo de nuevo.';
+      await this.alertsService.success(
+        'Pedido preparado',
+        'Hemos registrado el pedido y dejado listo el mensaje de WhatsApp para enviarlo.',
+      );
+    } catch (error) {
+      this.errorMessage = error instanceof Error
+        ? error.message
+        : 'No se pudo guardar el pedido. Inténtalo de nuevo.';
+      await this.alertsService.error('No se pudo guardar el pedido', this.errorMessage);
     } finally {
       this.isSubmitting = false;
+      this.submissionMessage = null;
     }
   }
 
@@ -119,12 +149,80 @@ export class Checkout {
 
   get addressErrorMessage(): string | null {
     return this.checkoutForm.errors?.['missingAddress']
-      ? 'La direccion es obligatoria cuando el pedido va con envio.'
+      ? 'La dirección es obligatoria cuando el pedido va con envío.'
       : null;
   }
 
+  get deliveryHelpText(): string {
+    return this.isShipping
+      ? 'Te pediremos la dirección completa para preparar el envío.'
+      : 'Si eliges recogida, no necesitamos dirección postal.';
+  }
+
   getDeliveryLabel(method: 'shipping' | 'pickup'): string {
-    return method === 'shipping' ? 'Envio' : 'Recogida';
+    return method === 'shipping' ? 'Envío' : 'Recogida';
+  }
+
+  getControlErrorMessage(
+    controlName:
+      | 'name'
+      | 'email'
+      | 'phone'
+      | 'addressLine1'
+      | 'postalCode'
+      | 'city'
+      | 'province'
+      | 'acceptsPolicies',
+  ): string | null {
+    const control = this.checkoutForm.controls[controlName];
+
+    if (!control || !control.touched) {
+      return null;
+    }
+
+    if (control.hasError('required')) {
+      switch (controlName) {
+        case 'name':
+          return 'Indica el nombre de la persona que hace el pedido.';
+        case 'email':
+          return 'Necesitamos un correo para asociar el pedido.';
+        case 'phone':
+          return 'Necesitamos un teléfono de contacto.';
+        case 'postalCode':
+          return 'El código postal es obligatorio.';
+        case 'city':
+          return 'La ciudad es obligatoria.';
+        case 'province':
+          return 'La provincia es obligatoria.';
+        default:
+          return 'Este campo es obligatorio.';
+      }
+    }
+
+    if (control.hasError('minlength') && controlName === 'name') {
+      return 'Escribe al menos 2 caracteres.';
+    }
+
+    if (control.hasError('email')) {
+      return 'Escribe un correo válido.';
+    }
+
+    if (control.hasError('pattern')) {
+      switch (controlName) {
+        case 'phone':
+          return 'Escribe un teléfono válido de entre 9 y 15 caracteres.';
+        case 'postalCode':
+          return 'El código postal debe tener 5 dígitos.';
+        default:
+          return 'El formato no es válido.';
+      }
+    }
+
+    if (control.hasError('requiredTrue') && controlName === 'acceptsPolicies') {
+      return 'Debes aceptar el uso de datos para continuar.';
+    }
+
+    return null;
   }
 
   private shippingAddressValidator(control: AbstractControl): ValidationErrors | null {
@@ -136,5 +234,37 @@ export class Checkout {
     }
 
     return null;
+  }
+
+  private getCheckoutValidationMessage(): string {
+    if (this.checkoutForm.controls.name.invalid) {
+      return 'Revisa el nombre de contacto antes de continuar.';
+    }
+
+    if (this.checkoutForm.controls.email.invalid) {
+      return 'Revisa el correo electrónico antes de continuar.';
+    }
+
+    if (this.checkoutForm.controls.phone.invalid) {
+      return 'Revisa el teléfono de contacto antes de continuar.';
+    }
+
+    if (this.checkoutForm.errors?.['missingAddress']) {
+      return 'Completa la dirección de envío para continuar.';
+    }
+
+    if (this.checkoutForm.controls.postalCode.invalid) {
+      return 'Revisa el código postal antes de continuar.';
+    }
+
+    if (this.checkoutForm.controls.city.invalid || this.checkoutForm.controls.province.invalid) {
+      return 'Completa la ciudad y la provincia antes de continuar.';
+    }
+
+    if (this.checkoutForm.controls.acceptsPolicies.invalid) {
+      return 'Debes aceptar el uso de datos para poder preparar el pedido.';
+    }
+
+    return 'Revisa los datos del pedido antes de continuar.';
   }
 }

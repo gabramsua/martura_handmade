@@ -5,12 +5,16 @@
     <p>Generaremos un pedido estructurado y un mensaje listo para enviar por WhatsApp.</p>
   </div>
 
+  @if (isSubmitting) {
+    <mat-progress-bar mode="indeterminate"></mat-progress-bar>
+  }
+
   @if (lastOrder) {
     <div class="order-confirmation">
       <p class="eyebrow">Pedido preparado</p>
-      <h2>Tu pedido ya esta registrado</h2>
+      <h2>Tu pedido ya está registrado</h2>
       <p>
-        Hemos guardado el pedido, descontado stock y dejado el mensaje listo para que la clienta lo envie por WhatsApp.
+        Hemos guardado el pedido, descontado stock y dejado el mensaje listo para enviarlo por WhatsApp.
       </p>
 
       <div class="confirmation-card">
@@ -66,48 +70,72 @@
             Nombre
             <input type="text" formControlName="name" autocomplete="name" />
           </label>
+          @if (getControlErrorMessage('name'); as message) {
+            <p class="form-error">{{ message }}</p>
+          }
+
           <label>
-            Email
+            Correo electrónico
             <input type="email" formControlName="email" autocomplete="email" />
           </label>
+          @if (getControlErrorMessage('email'); as message) {
+            <p class="form-error">{{ message }}</p>
+          }
+
           <label>
-            Telefono
+            Teléfono
             <input type="tel" formControlName="phone" autocomplete="tel" />
           </label>
+          @if (getControlErrorMessage('phone'); as message) {
+            <p class="form-error">{{ message }}</p>
+          }
+
           <label>
             Entrega
             <select formControlName="deliveryMethod">
-              <option value="shipping">Envio</option>
+              <option value="shipping">Envío</option>
               <option value="pickup">Recogida</option>
             </select>
           </label>
 
+          <p class="delivery-help wide">{{ deliveryHelpText }}</p>
+
           <div class="form-section wide">
-            <p class="section-kicker">Direccion</p>
+            <p class="section-kicker">Dirección</p>
           </div>
 
           @if (isShipping) {
             <label class="wide">
-              Direccion
+              Dirección
               <input type="text" formControlName="addressLine1" autocomplete="address-line1" />
             </label>
+            @if (addressErrorMessage) {
+              <p class="form-error wide">{{ addressErrorMessage }}</p>
+            }
           }
 
           <label>
-            Codigo postal
+            Código postal
             <input type="text" formControlName="postalCode" inputmode="numeric" autocomplete="postal-code" />
           </label>
+          @if (getControlErrorMessage('postalCode'); as message) {
+            <p class="form-error">{{ message }}</p>
+          }
+
           <label>
             Ciudad
             <input type="text" formControlName="city" autocomplete="address-level2" />
           </label>
+          @if (getControlErrorMessage('city'); as message) {
+            <p class="form-error">{{ message }}</p>
+          }
+
           <label>
             Provincia
             <input type="text" formControlName="province" autocomplete="address-level1" />
           </label>
-
-          @if (addressErrorMessage) {
-            <p class="form-error">{{ addressErrorMessage }}</p>
+          @if (getControlErrorMessage('province'); as message) {
+            <p class="form-error">{{ message }}</p>
           }
 
           <label class="wide">
@@ -117,20 +145,30 @@
 
           <label class="checkbox-row wide">
             <input type="checkbox" formControlName="acceptsPolicies" />
-            Confirmo que estos datos se usaran solo para gestionar el pedido.
+            Confirmo que estos datos se usarán solo para gestionar el pedido.
           </label>
+          @if (getControlErrorMessage('acceptsPolicies'); as message) {
+            <p class="form-error wide">{{ message }}</p>
+          }
+
+          @if (submissionMessage) {
+            <p class="saved-order">{{ submissionMessage }}</p>
+          }
 
           @if (errorMessage) {
-            <p class="form-error">{{ errorMessage }}</p>
+            <p class="form-error wide">{{ errorMessage }}</p>
           }
 
           <button class="button primary" type="submit" [disabled]="isSubmitting">
-            {{ isSubmitting ? 'Guardando pedido...' : 'Generar mensaje' }}
+            @if (isSubmitting) {
+              <mat-spinner diameter="18"></mat-spinner>
+            }
+            {{ isSubmitting ? 'Guardando pedido...' : 'Preparar pedido' }}
           </button>
         </form>
 
         <aside class="order-preview">
-          <h2>Pedido</h2>
+          <h2>Resumen del pedido</h2>
           <div class="preview-block">
             <span>Entrega</span>
             <strong>{{ getDeliveryLabel(checkoutForm.controls.deliveryMethod.value) }}</strong>
@@ -149,7 +187,7 @@
       </div>
     } @else {
       <div class="empty-checkout">
-        <h2>No hay productos para preparar pedido.</h2>
+        <h2>No hay productos para preparar el pedido.</h2>
         <a class="button primary" routerLink="/">Volver a la tienda</a>
       </div>
     }

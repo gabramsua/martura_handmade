@@ -17,6 +17,7 @@ import {
   isProductAvailable,
   isProductVisible,
   normalizePricingMode,
+  normalizeProductCampaignIds,
   normalizeProductStatus,
   Product,
   ProductDraft,
@@ -25,11 +26,19 @@ import {
 } from '../models/product.model';
 import { CartItem } from '../models/cart.model';
 import { OrderItem } from '../models/order.model';
-import { firestoreCollections, isFirebaseConfigured } from '../firebase/firebase.config';
+import { TaxonomyType } from '../models/taxonomy.model';
+import {
+  firestoreCollections,
+  isFirebaseConfigured,
+  isUsingFirebaseEmulators,
+} from '../firebase/firebase.config';
 import { reviveProduct } from '../firebase/firestore.mappers';
 import { resolveProductPricing } from '../utils/product-pricing';
+import { buildUniqueSlug, slugify } from '../utils/slug';
 import { CampaignsService } from './campaigns.service';
 import { LocalStorageService } from './local-storage.service';
+import { MediaService } from './media.service';
+import { TaxonomiesService } from './taxonomies.service';
 
 const INITIAL_FILTERS: ProductFilters = {
   categorySlug: null,
@@ -45,6 +54,8 @@ export class ProductsService {
   private readonly firestore = inject(Firestore, { optional: true });
   private readonly campaignsService = inject(CampaignsService);
   private readonly localStorageService = inject(LocalStorageService);
+  private readonly mediaService = inject(MediaService);
+  private readonly taxonomiesService = inject(TaxonomiesService);
   private readonly productsSubject = new BehaviorSubject<Product[]>(
     this.readInitialProducts(),
   );
@@ -52,35 +63,36 @@ export class ProductsService {
   private readonly loadingSubject = new BehaviorSubject<boolean>(
     isFirebaseConfigured && !!this.firestore,
   );
+  private hasRequestedDemoSeed = false;
 
   readonly loading$ = this.loadingSubject.asObservable();
   readonly products$ = this.productsSubject.asObservable();
   readonly filters$ = this.filtersSubject.asObservable();
-  readonly categories$ = this.products$.pipe(
-    map((products) =>
-      Array.from(
-        new Map(
-          this.getPublicCatalogProducts(products).map((product) => [product.categorySlug, product.category]),
-        ).entries(),
-      )
-        .map(([slug, name]) => ({ slug, name }))
-        .sort((left, right) => left.name.localeCompare(right.name, 'es')),
+  readonly categories$ = combineLatest([this.taxonomiesService.categories$, this.products$]).pipe(
+    map(([taxonomies, products]) =>
+      this.mergeCatalogTaxonomies(
+        taxonomies,
+        this.getPublicCatalogProducts(products).map((product) => ({
+          slug: product.categorySlug,
+          name: product.category,
+        })),
+      ),
     ),
   );
-  readonly collections$ = this.products$.pipe(
-    map((products) =>
-      Array.from(
-        new Map(
-          this.getPublicCatalogProducts(products)
-            .filter(
-              (product): product is Product & { collection: string; collectionSlug: string } =>
-                !!product.collectionSlug && !!product.collection,
-            )
-            .map((product) => [product.collectionSlug, product.collection] as const),
-        ).entries(),
-      )
-        .map(([slug, name]) => ({ slug, name }))
-        .sort((left, right) => left.name.localeCompare(right.name, 'es')),
+  readonly collections$ = combineLatest([this.taxonomiesService.collections$, this.products$]).pipe(
+    map(([taxonomies, products]) =>
+      this.mergeCatalogTaxonomies(
+        taxonomies,
+        this.getPublicCatalogProducts(products)
+          .filter(
+            (product): product is Product & { collection: string; collectionSlug: string } =>
+              !!product.collectionSlug && !!product.collection,
+          )
+          .map((product) => ({
+            slug: product.collectionSlug,
+            name: product.collection,
+          })),
+      ),
     ),
   );
 
@@ -114,16 +126,19 @@ export class ProductsService {
 
     collectionData(productsQuery, { idField: 'id' }).subscribe({
       next: (products) => {
-        const nextProducts = (products as Array<Product & { createdAt: unknown }>).map((product) =>
-          reviveProduct(product),
+        const nextProducts = this.sortStoredProducts(
+          (products as Array<Product & { createdAt: unknown }>).map((product) => reviveProduct(product)),
         );
+
+        if (nextProducts.length === 0 && isUsingFirebaseEmulators && !this.hasRequestedDemoSeed) {
+          this.hasRequestedDemoSeed = true;
+          this.loadingSubject.next(true);
+          void this.seedDemoCatalog();
+          return;
+        }
 
         this.productsSubject.next(nextProducts);
         this.loadingSubject.next(false);
-
-        if (nextProducts.length === 0) {
-          void this.seedProductsIfEmpty();
-        }
       },
       error: () => {
         this.loadingSubject.next(false);
@@ -133,6 +148,10 @@ export class ProductsService {
 
   updateFilters(partial: Partial<ProductFilters>): void {
     this.filtersSubject.next({ ...this.filtersSubject.value, ...partial });
+  }
+
+  get productsSnapshot(): Product[] {
+    return this.productsSubject.value;
   }
 
   clearFilters(): void {
@@ -189,7 +208,7 @@ export class ProductsService {
       return;
     }
 
-    this.setProducts([product, ...this.productsSubject.value]);
+    this.setProducts([...this.productsSubject.value, product]);
   }
 
   async updateProduct(productId: string, draft: ProductDraft): Promise<void> {
@@ -204,9 +223,11 @@ export class ProductsService {
       id: updatedProduct.id,
       createdAt: updatedProduct.createdAt,
     };
+    const removedGalleryUrls = this.getRemovedGalleryUrls(updatedProduct, nextProduct);
 
     if (isFirebaseConfigured && this.firestore) {
       await setDoc(this.getProductDoc(productId), nextProduct);
+      await this.mediaService.deleteProductImages(removedGalleryUrls);
       return;
     }
 
@@ -217,18 +238,82 @@ export class ProductsService {
           : product,
       ),
     );
+    await this.mediaService.deleteProductImages(removedGalleryUrls);
   }
 
   async deleteProduct(productId: string): Promise<void> {
+    const product = this.productsSubject.value.find((entry) => entry.id === productId);
+
     if (isFirebaseConfigured && this.firestore) {
       await deleteDoc(this.getProductDoc(productId));
+      await this.mediaService.deleteProductImages(product?.gallery ?? []);
       return;
     }
 
     this.setProducts(this.productsSubject.value.filter((product) => product.id !== productId));
+    await this.mediaService.deleteProductImages(product?.gallery ?? []);
+  }
+
+  async replaceTaxonomyReference(
+    type: TaxonomyType,
+    previousSlug: string,
+    nextValue: { name: string; slug: string },
+  ): Promise<void> {
+    const impactedProducts = this.productsSubject.value.filter((product) =>
+      type === 'category' ? product.categorySlug === previousSlug : product.collectionSlug === previousSlug,
+    );
+
+    if (!impactedProducts.length) {
+      return;
+    }
+
+    const nextProducts = this.productsSubject.value.map((product) => {
+      const matchesTaxonomy = type === 'category'
+        ? product.categorySlug === previousSlug
+        : product.collectionSlug === previousSlug;
+
+      if (!matchesTaxonomy) {
+        return product;
+      }
+
+      return type === 'category'
+        ? {
+            ...product,
+            category: nextValue.name,
+            categorySlug: nextValue.slug,
+          }
+        : {
+            ...product,
+            collection: nextValue.name,
+            collectionSlug: nextValue.slug,
+          };
+    });
+
+    if (isFirebaseConfigured && this.firestore) {
+      const batch = writeBatch(this.firestore);
+
+      for (const product of nextProducts) {
+        const matchesTaxonomy = type === 'category'
+          ? product.categorySlug === nextValue.slug
+          : product.collectionSlug === nextValue.slug;
+
+        if (!matchesTaxonomy) {
+          continue;
+        }
+
+        batch.set(this.getProductDoc(product.id), product);
+      }
+
+      await batch.commit();
+      return;
+    }
+
+    this.setProducts(nextProducts);
   }
 
   async resetProducts(): Promise<void> {
+    const galleryUrls = this.productsSubject.value.flatMap((product) => product.gallery);
+
     if (isFirebaseConfigured && this.firestore) {
       const batch = writeBatch(this.firestore);
 
@@ -241,10 +326,12 @@ export class ProductsService {
       }
 
       await batch.commit();
+      await this.mediaService.deleteProductImages(galleryUrls);
       return;
     }
 
     this.setProducts(MOCK_PRODUCTS);
+    await this.mediaService.deleteProductImages(galleryUrls);
   }
 
   async applyOrder(orderItems: OrderItem[]): Promise<void> {
@@ -373,47 +460,41 @@ export class ProductsService {
   }
 
   private draftToProduct(draft: ProductDraft, existingProduct?: Product): Product {
-    const slug = draft.slug || this.slugify(draft.name);
+    const gallery = Array.from(new Set(draft.gallery.map((image) => image.trim()).filter(Boolean)));
+    const imageUrl = gallery[0] ?? draft.imageUrl.trim();
+    const slug = this.buildProductSlug(draft.slug || draft.name, existingProduct?.id);
     const normalizedStatus = normalizeProductStatus(draft.status, draft.stock);
 
     return {
       id: existingProduct?.id ?? `prd-${slug}-${Date.now()}`,
       name: draft.name,
       slug,
+      position: this.normalizePosition(draft.position, existingProduct?.position),
       description: draft.description,
       story: draft.story,
       originalPrice: draft.originalPrice,
       offerPrice: draft.offerPrice,
-      imageUrl: draft.imageUrl,
-      gallery: draft.gallery.length > 0 ? draft.gallery : [draft.imageUrl],
+      imageUrl,
+      gallery,
       category: draft.category,
-      categorySlug: draft.categorySlug || this.slugify(draft.category),
+      categorySlug: draft.categorySlug || slugify(draft.category),
       collection: draft.collection,
       collectionSlug: draft.collectionSlug,
       stock: draft.stock,
       sizes: draft.sizes,
       colors: draft.colors,
       pricingMode: normalizePricingMode(draft),
-      campaignId: draft.campaignId,
+      campaignIds: normalizeProductCampaignIds(draft),
       featured: draft.featured,
       status: normalizedStatus,
       createdAt: existingProduct?.createdAt ?? new Date(),
     };
   }
 
-  private slugify(value: string): string {
-    return value
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .toLowerCase()
-      .trim()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/(^-|-$)+/g, '');
-  }
-
   private setProducts(products: Product[]): void {
-    this.productsSubject.next(products);
-    this.localStorageService.write(PRODUCTS_STORAGE_KEY, products);
+    const nextProducts = this.sortStoredProducts(products);
+    this.productsSubject.next(nextProducts);
+    this.localStorageService.write(PRODUCTS_STORAGE_KEY, nextProducts);
   }
 
   private getPublicCatalogProducts(products: Product[]): Product[] {
@@ -426,14 +507,20 @@ export class ProductsService {
     nextProducts.sort((left, right) => {
       switch (sortBy) {
         case 'price-asc':
-          return this.getEffectivePrice(left) - this.getEffectivePrice(right);
+          return (
+            this.getEffectivePrice(left) - this.getEffectivePrice(right) ||
+            this.compareCatalogPriority(left, right)
+          );
         case 'price-desc':
-          return this.getEffectivePrice(right) - this.getEffectivePrice(left);
+          return (
+            this.getEffectivePrice(right) - this.getEffectivePrice(left) ||
+            this.compareCatalogPriority(left, right)
+          );
         case 'name':
-          return left.name.localeCompare(right.name, 'es');
+          return left.name.localeCompare(right.name, 'es') || this.compareCatalogPriority(left, right);
         case 'newest':
         default:
-          return right.createdAt.getTime() - left.createdAt.getTime();
+          return this.compareCatalogPriority(left, right);
       }
     });
 
@@ -449,8 +536,10 @@ export class ProductsService {
       return [];
     }
 
-    return this.localStorageService.read(PRODUCTS_STORAGE_KEY, MOCK_PRODUCTS, (products) =>
-      (products as Array<Product & { createdAt: unknown }>).map((product) => reviveProduct(product)),
+    return this.sortStoredProducts(
+      this.localStorageService.read(PRODUCTS_STORAGE_KEY, MOCK_PRODUCTS, (products) =>
+        (products as Array<Product & { createdAt: unknown }>).map((product) => reviveProduct(product)),
+      ),
     );
   }
 
@@ -458,17 +547,104 @@ export class ProductsService {
     return doc(this.firestore!, firestoreCollections.products, productId);
   }
 
-  private async seedProductsIfEmpty(): Promise<void> {
-    if (!this.firestore || this.productsSubject.value.length > 0) {
+  private async seedDemoCatalog(): Promise<void> {
+    if (!this.firestore) {
+      this.loadingSubject.next(false);
       return;
     }
 
-    const batch = writeBatch(this.firestore);
+    try {
+      const batch = writeBatch(this.firestore);
 
-    for (const product of MOCK_PRODUCTS) {
-      batch.set(this.getProductDoc(product.id), product);
+      for (const product of MOCK_PRODUCTS) {
+        batch.set(this.getProductDoc(product.id), product);
+      }
+
+      await batch.commit();
+    } catch {
+      this.loadingSubject.next(false);
+    }
+  }
+
+  private sortStoredProducts(products: Product[]): Product[] {
+    return [...products].sort((left, right) => this.compareCatalogPriority(left, right));
+  }
+
+  private compareCatalogPriority(left: Product, right: Product): number {
+    if (left.position !== right.position) {
+      return left.position - right.position;
     }
 
-    await batch.commit();
+    return right.createdAt.getTime() - left.createdAt.getTime();
   }
+
+  private buildProductSlug(value: string, currentProductId?: string): string {
+    const usedSlugs = this.productsSubject.value
+      .filter((product) => product.id !== currentProductId)
+      .map((product) => product.slug);
+
+    return buildUniqueSlug(value, usedSlugs, 'producto');
+  }
+
+  private normalizePosition(value: number | undefined, fallback?: number): number {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return Math.max(0, Math.round(value));
+    }
+
+    if (typeof fallback === 'number' && Number.isFinite(fallback)) {
+      return Math.max(0, Math.round(fallback));
+    }
+
+    return this.getNextProductPosition();
+  }
+
+  private getNextProductPosition(): number {
+    if (!this.productsSubject.value.length) {
+      return 10;
+    }
+
+    return Math.max(...this.productsSubject.value.map((product) => product.position || 0)) + 10;
+  }
+
+  private getRemovedGalleryUrls(currentProduct: Product, nextProduct: Product): string[] {
+    const nextGallery = new Set(nextProduct.gallery);
+    return currentProduct.gallery.filter((imageUrl) => !nextGallery.has(imageUrl));
+  }
+
+  private mergeCatalogTaxonomies(
+    taxonomies: Array<{ slug: string; name: string; position?: number }>,
+    catalogEntries: Array<{ slug: string; name: string }>,
+  ): Array<{ slug: string; name: string }> {
+    const entries = new Map<string, { slug: string; name: string; position: number }>();
+
+    for (const taxonomy of taxonomies) {
+      entries.set(taxonomy.slug, {
+        slug: taxonomy.slug,
+        name: taxonomy.name,
+        position: typeof taxonomy.position === 'number' ? taxonomy.position : 0,
+      });
+    }
+
+    for (const entry of catalogEntries) {
+      if (entries.has(entry.slug)) {
+        continue;
+      }
+
+      entries.set(entry.slug, {
+        ...entry,
+        position: Number.MAX_SAFE_INTEGER,
+      });
+    }
+
+    return Array.from(entries.values())
+      .sort((left, right) => {
+        if (left.position !== right.position) {
+          return left.position - right.position;
+        }
+
+        return left.name.localeCompare(right.name, 'es');
+      })
+      .map(({ slug, name }) => ({ slug, name }));
+  }
+
 }

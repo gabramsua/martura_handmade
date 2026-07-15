@@ -21,6 +21,7 @@ export class App {
   readonly isAuthenticated$ = this.authService.isAuthenticated$;
   readonly isAdmin$ = this.authService.isAdmin$;
   readonly isCustomer$ = this.user$.pipe(map((user) => user?.role === 'customer'));
+  readonly showStoreActions$ = this.user$.pipe(map((user) => user?.role !== 'admin'));
   readonly cartItems$ = this.cartService.totalItems$;
 
   async logout(): Promise<void> {

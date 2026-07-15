@@ -22,6 +22,7 @@ import {
   getCampaignLifecycle,
   isCampaignActive,
 } from '../models/campaign.model';
+import { slugify } from '../utils/slug';
 import { LocalStorageService } from './local-storage.service';
 
 const CAMPAIGNS_STORAGE_KEY = 'martura_campaigns';
@@ -59,10 +60,6 @@ export class CampaignsService {
 
         this.campaignsSubject.next(nextCampaigns);
         this.loadingSubject.next(false);
-
-        if (nextCampaigns.length === 0) {
-          void this.seedCampaignsIfEmpty();
-        }
       },
       error: () => {
         this.loadingSubject.next(false);
@@ -154,7 +151,7 @@ export class CampaignsService {
   }
 
   private draftToCampaign(draft: CampaignDraft, existingCampaign?: Campaign): Campaign {
-    const slug = this.slugify(draft.badge || draft.name);
+    const slug = slugify(draft.badge || draft.name);
 
     return {
       id: existingCampaign?.id ?? draft.id ?? `cmp-${slug}-${Date.now()}`,
@@ -188,29 +185,5 @@ export class CampaignsService {
 
   private getCampaignDoc(campaignId: string) {
     return doc(this.firestore!, firestoreCollections.campaigns, campaignId);
-  }
-
-  private async seedCampaignsIfEmpty(): Promise<void> {
-    if (!this.firestore || this.campaignsSubject.value.length > 0) {
-      return;
-    }
-
-    const batch = writeBatch(this.firestore);
-
-    for (const campaign of MOCK_CAMPAIGNS) {
-      batch.set(this.getCampaignDoc(campaign.id), campaign);
-    }
-
-    await batch.commit();
-  }
-
-  private slugify(value: string): string {
-    return value
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .toLowerCase()
-      .trim()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/(^-|-$)+/g, '');
   }
 }

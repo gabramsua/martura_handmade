@@ -51,9 +51,12 @@
 .current-user button,
 .provider-button,
 .login-panel form button {
+  align-items: center;
   background: var(--ink);
   color: #fff;
+  display: inline-flex;
   font-weight: 800;
+  gap: 8px;
   justify-content: center;
   min-height: 46px;
   padding: 0 16px;
@@ -103,6 +106,24 @@
   font-weight: 700;
   margin: 0;
   padding: 10px 12px;
+}
+
+.field-error,
+.login-status {
+  border-radius: 6px;
+  font-weight: 700;
+  margin: -6px 0 0;
+  padding: 10px 12px;
+}
+
+.field-error {
+  background: #f8e6e1;
+  color: #8a3f32;
+}
+
+.login-status {
+  background: #edf7f1;
+  color: #1f6b4b;
 }
 
 .admin-hint {

@@ -4,7 +4,10 @@
   "scripts": {
     "ng": "ng",
     "start": "ng serve",
+    "start:emulators": "ng serve --configuration development",
+    "start:firebase": "ng serve --configuration production",
     "build": "ng build",
+    "build:functions": "npm --prefix functions run build",
     "watch": "ng build --watch --configuration development",
     "test": "ng test"
   },
@@ -20,17 +23,21 @@
   },
   "private": true,
   "dependencies": {
+    "@angular/animations": "^20.3.25",
+    "@angular/cdk": "^20.2.11",
     "@angular/common": "^20.3.25",
     "@angular/compiler": "^20.3.25",
     "@angular/core": "^20.3.25",
     "@angular/fire": "^20.0.1",
     "@angular/forms": "^20.3.25",
+    "@angular/material": "^20.2.11",
     "@angular/platform-browser": "^20.3.25",
     "@angular/platform-browser-dynamic": "^20.3.25",
     "@angular/platform-server": "^20.3.25",
     "@angular/router": "^20.3.25",
     "firebase": "^11.10.0",
     "rxjs": "~7.8.0",
+    "sweetalert2": "^11.26.25",
     "tslib": "^2.3.0",
     "zone.js": "~0.15.0"
   },

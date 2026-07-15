@@ -1,9 +1,9 @@
 export const environment = {
-  production: true,
+  production: false,
   firebase: {
     enabled: true,
     adminEmails: ['gabramsua@gmail.com'],
-    useEmulators: false,
+    useEmulators: true,
     config: {
       apiKey: "AIzaSyB6_4iJHwKebbeXrVN0DECQemOkUGJlvjQ",
       authDomain: "martura-handmade.firebaseapp.com",

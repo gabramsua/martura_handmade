@@ -9,23 +9,31 @@
 
   <nav class="main-nav" aria-label="Navegacion principal">
     <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Tienda</a>
-    <a routerLink="/admin" routerLinkActive="active">Dashboard</a>
     @if (isCustomer$ | async) {
-      <a routerLink="/pedidos" routerLinkActive="active">Mis pedidos</a>
+      <a routerLink="/cuenta" routerLinkActive="active">Mi cuenta</a>
     }
     @if (user$ | async; as user) {
-      <button type="button" class="session-button" (click)="logout()">{{ user.name }}</button>
+      <span class="session-label">
+        <strong>{{ user.name }}</strong>
+        <small>{{ user.email }}</small>
+      </span>
+      @if (isAdmin$ | async) {
+        <a class="session-role" routerLink="/admin" routerLinkActive="active">Admin</a>
+      }
+      <button type="button" class="session-button" (click)="logout()">Salir</button>
     } @else {
       <a routerLink="/login" routerLinkActive="active">Login</a>
     }
   </nav>
 
-  <a class="cart-link" routerLink="/carrito" aria-label="Ver carrito">
-    <span>Carrito</span>
-    @if (cartItems$ | async; as totalItems) {
-      <strong>{{ totalItems }}</strong>
-    }
-  </a>
+  @if (showStoreActions$ | async) {
+    <a class="cart-link" routerLink="/carrito" aria-label="Ver carrito">
+      <span>Carrito</span>
+      @if (cartItems$ | async; as totalItems) {
+        <strong>{{ totalItems }}</strong>
+      }
+    </a>
+  }
 </header>
 
 <main>
@@ -33,6 +41,10 @@
 </main>
 
 <footer class="site-footer">
-  <p>Martura Handmade · piezas textiles hechas despacio en Espana.</p>
-  <a routerLink="/checkout">Cerrar pedido</a>
+  <p>Martura Handmade - piezas textiles hechas despacio en España.</p>
+  @if (showStoreActions$ | async) {
+    <a routerLink="/checkout">Cerrar pedido</a>
+  } @else {
+    <a routerLink="/admin">Panel interno</a>
+  }
 </footer>

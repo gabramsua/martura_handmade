@@ -2,6 +2,10 @@
   padding: clamp(36px, 6vw, 78px) clamp(18px, 5vw, 64px);
 }
 
+mat-progress-bar {
+  margin-top: 18px;
+}
+
 .checkout-layout {
   align-items: start;
   display: grid;
@@ -48,6 +52,10 @@
 }
 
 .checkout-form button {
+  align-items: center;
+  display: inline-flex;
+  gap: 8px;
+  justify-content: center;
   grid-column: 1 / -1;
   width: fit-content;
 }
@@ -64,6 +72,15 @@
   letter-spacing: 0;
   margin: 0;
   text-transform: uppercase;
+}
+
+.delivery-help {
+  background: var(--paper);
+  border-radius: 6px;
+  color: var(--muted);
+  font-weight: 700;
+  margin: -4px 0 0;
+  padding: 10px 12px;
 }
 
 .checkbox-row {

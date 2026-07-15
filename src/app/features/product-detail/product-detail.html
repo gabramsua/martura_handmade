@@ -1,16 +1,22 @@
 @if (product$ | async; as product) {
-  <section class="detail-shell">
-    <div class="detail-gallery">
-      <img class="main-image" [src]="product.imageUrl" [alt]="product.name" />
+<section class="detail-shell">
+  <div class="detail-gallery">
+      <img class="main-image" [src]="getMainImage(product)" [alt]="product.name" />
       <div class="thumb-row">
         @for (image of product.gallery; track image) {
-          <img [src]="image" [alt]="product.name" />
+          <button
+            type="button"
+            class="thumb-button"
+            [class.thumb-button-active]="getMainImage(product) === image"
+            (click)="selectImage(image)">
+            <img [src]="image" [alt]="product.name" />
+          </button>
         }
       </div>
     </div>
 
     <article class="detail-info">
-      <a class="back-link" routerLink="/">Volver al catalogo</a>
+      <a class="back-link" routerLink="/">Volver al catálogo</a>
       <p class="eyebrow">{{ getTaxonomyLabel(product) }}</p>
       <h1>{{ product.name }}</h1>
       <p class="status-pill" [class.sold-out]="!isAvailable(product)">{{ getStatusLabel(product) }}</p>
@@ -24,20 +30,31 @@
         }
       </div>
 
-      @if (getCampaignLabel(product); as campaignLabel) {
-        <p class="campaign-note">{{ campaignLabel }}</p>
+      @if (getCampaignSummary(product); as campaignSummary) {
+        <div class="campaign-note">
+          <p>Promoción aplicada</p>
+          <strong>{{ campaignSummary }}</strong>
+        </div>
       }
 
-      <div class="variant-panel">
-        <p>Tamano o variante</p>
-        <div class="variant-list">
-          @for (size of product.sizes; track size) {
-            <button type="button" [disabled]="!isAvailable(product)" (click)="addToCart(product, size)">
-              {{ isAvailable(product) ? 'Anadir ' + size : 'Sin stock' }}
-            </button>
-          }
+      @if (isAdmin$ | async) {
+        <div class="variant-panel admin-panel">
+          <p>Vista interna</p>
+          <span>Este producto se está viendo como administradora.</span>
+          <a class="admin-panel-link" routerLink="/admin">Abrir en dashboard</a>
         </div>
-      </div>
+      } @else {
+        <div class="variant-panel">
+          <p>Tamaño o variante</p>
+          <div class="variant-list">
+            @for (size of product.sizes; track size) {
+              <button type="button" [disabled]="!isAvailable(product)" (click)="addToCart(product, size)">
+                {{ isAvailable(product) ? 'Añadir ' + size : 'Sin stock' }}
+              </button>
+            }
+          </div>
+        </div>
+      }
 
       <dl class="detail-meta">
         <div>
@@ -49,11 +66,11 @@
           <dd>{{ product.colors.join(', ') }}</dd>
         </div>
         <div>
-          <dt>Coleccion</dt>
+          <dt>Colección</dt>
           <dd>{{ product.collection || 'Permanente' }}</dd>
         </div>
         <div>
-          <dt>Envio</dt>
+          <dt>Envío</dt>
           <dd>Gratis desde 75 EUR</dd>
         </div>
       </dl>

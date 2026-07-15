@@ -21,10 +21,22 @@ export interface OrderItem {
   productId: string;
   productName: string;
   imageUrl: string;
+  category?: string | null;
+  categorySlug?: string | null;
+  collection?: string | null;
+  collectionSlug?: string | null;
+  campaignId?: string | null;
+  campaignName?: string | null;
   quantity: number;
   variant: string;
   unitPrice: number;
   lineTotal: number;
+}
+
+export interface OrderRequestItem {
+  productId: string;
+  quantity: number;
+  variant: string;
 }
 
 export interface CheckoutOrder {
@@ -41,10 +53,25 @@ export interface CheckoutOrder {
   updatedAt: Date;
 }
 
+export type SerializedCheckoutOrder = Omit<CheckoutOrder, 'createdAt' | 'updatedAt'> & {
+  createdAt: string | number | Date;
+  updatedAt: string | number | Date;
+};
+
 export interface OrderFilters {
   status: OrderStatus | 'all';
   deliveryMethod: DeliveryMethod | 'all';
   query: string;
+}
+
+export interface CreateOrderPayload {
+  customer: CustomerContact;
+  items: OrderRequestItem[];
+}
+
+export interface UpdateOrderStatusPayload {
+  orderId: string;
+  status: OrderStatus;
 }
 
 export function normalizeOrderStatus(status: string | null | undefined): OrderStatus {
@@ -77,7 +104,7 @@ export function getOrderStatusLabel(
     case 'confirmed':
       return 'Confirmado';
     case 'prepared':
-      return deliveryMethod === 'shipping' ? 'Preparando envio' : 'Listo para recoger';
+      return deliveryMethod === 'shipping' ? 'Preparando envío' : 'Listo para recoger';
     case 'completed':
       return deliveryMethod === 'shipping' ? 'Enviado' : 'Recogido';
     case 'cancelled':
@@ -88,12 +115,19 @@ export function getOrderStatusLabel(
 }
 
 export function cartItemToOrderItem(item: CartItem, campaigns: Campaign[]): OrderItem {
-  const unitPrice = resolveProductPricing(item.product, campaigns).effectivePrice;
+  const pricing = resolveProductPricing(item.product, campaigns);
+  const unitPrice = pricing.effectivePrice;
 
   return {
     productId: item.product.id,
     productName: item.product.name,
     imageUrl: item.product.imageUrl,
+    category: item.product.category,
+    categorySlug: item.product.categorySlug,
+    collection: item.product.collection,
+    collectionSlug: item.product.collectionSlug,
+    campaignId: pricing.source === 'campaign' && pricing.hasDiscount ? pricing.campaignId : null,
+    campaignName: pricing.source === 'campaign' && pricing.hasDiscount ? pricing.campaignName : null,
     quantity: item.quantity,
     variant: item.variant,
     unitPrice,

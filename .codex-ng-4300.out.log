@@ -1,0 +1,92 @@
+
+> martura-handmade@0.0.0 start:firebase
+> ng serve --configuration production --port 4300 --host 127.0.0.1
+
+[32m✔[0m [33mConsole Ninja[0m extension is connected to [33mAngular[0m, see [36mhttps://tinyurl.com/2vt8jxzw[0m
+[33m>[39m Building...
+[32m√[39m Building...
+[1mInitial chunk files[22m  [2m | [22m[1mNames[22m         [2m | [22m [1mRaw size[22m[2m | [22m[1mEstimated transfer size[22m
+[32mchunk-MKFEIVOS.js[39m    [2m | [22m[2m-[22m             [2m | [22m[36m298.05 kB[39m[2m | [22m               [36m82.85 kB[39m
+[32mchunk-IN2JSA3E.js[39m    [2m | [22m[2m-[22m             [2m | [22m[36m254.91 kB[39m[2m | [22m               [36m68.92 kB[39m
+[32mchunk-CXP6A7HC.js[39m    [2m | [22m[2m-[22m             [2m | [22m [36m84.01 kB[39m[2m | [22m               [36m21.30 kB[39m
+[32mpolyfills-5CFQRCPP.js[39m[2m | [22m[2mpolyfills[22m     [2m | [22m [36m34.59 kB[39m[2m | [22m               [36m11.33 kB[39m
+[32mchunk-EDHUHVTM.js[39m    [2m | [22m[2m-[22m             [2m | [22m [36m22.98 kB[39m[2m | [22m                [36m7.52 kB[39m
+[32mchunk-2FXOI2SQ.js[39m    [2m | [22m[2m-[22m             [2m | [22m  [36m9.15 kB[39m[2m | [22m                [36m3.22 kB[39m
+[32mmain-E73GAVWV.js[39m     [2m | [22m[2mmain[22m          [2m | [22m  [36m8.50 kB[39m[2m | [22m                [36m3.01 kB[39m
+[32mchunk-WDFO3GWL.js[39m    [2m | [22m[2m-[22m             [2m | [22m  [36m4.24 kB[39m[2m | [22m                [36m1.48 kB[39m
+[32mchunk-MOCKAEJX.js[39m    [2m | [22m[2m-[22m             [2m | [22m  [36m1.77 kB[39m[2m | [22m              [36m744 bytes[39m
+[32mstyles-PESX5VOM.css[39m  [2m | [22m[2mstyles[22m        [2m | [22m  [36m1.18 kB[39m[2m | [22m              [36m538 bytes[39m
+
+[1m [22m                    [2m | [22m[1mInitial total[22m [2m | [22m[1m[93m719.37 kB[39m[22m[2m | [22m              [1m200.91 kB[22m
+
+[1mLazy chunk files[22m     [2m | [22m[1mNames[22m         [2m | [22m [1mRaw size[22m[2m | [22m[1mEstimated transfer size[22m
+[32mchunk-365QODQ6.js[39m    [2m | [22m[2madmin[22m         [2m | [22m [36m49.28 kB[39m[2m | [22m               [36m10.93 kB[39m
+[32mchunk-WCTHXGIX.js[39m    [2m | [22m[2m-[22m             [2m | [22m [36m40.72 kB[39m[2m | [22m                [36m8.53 kB[39m
+[32mchunk-WP2BCNFI.js[39m    [2m | [22m[2mcheckout[22m      [2m | [22m [36m15.84 kB[39m[2m | [22m                [36m4.84 kB[39m
+[32mchunk-3N4XYNE6.js[39m    [2m | [22m[2mhome[22m          [2m | [22m [36m12.65 kB[39m[2m | [22m                [36m3.49 kB[39m
+[32mchunk-YUAK7S2Q.js[39m    [2m | [22m[2m-[22m             [2m | [22m [36m12.42 kB[39m[2m | [22m                [36m3.33 kB[39m
+[32mchunk-YUVWHYCA.js[39m    [2m | [22m[2mlogin[22m         [2m | [22m  [36m8.32 kB[39m[2m | [22m                [36m2.61 kB[39m
+[32mchunk-KGS6BG4H.js[39m    [2m | [22m[2mproduct-detail[22m[2m | [22m  [36m6.74 kB[39m[2m | [22m                [36m2.32 kB[39m
+[32mchunk-L2GFJK6O.js[39m    [2m | [22m[2mcart[22m          [2m | [22m  [36m5.49 kB[39m[2m | [22m                [36m1.77 kB[39m
+[32mchunk-WRTVUTNO.js[39m    [2m | [22m[2morders[22m        [2m | [22m  [36m4.84 kB[39m[2m | [22m                [36m1.79 kB[39m
+[32mchunk-NUC4SO6L.js[39m    [2m | [22m[2m-[22m             [2m | [22m  [36m4.61 kB[39m[2m | [22m                [36m1.66 kB[39m
+
+Application bundle generation complete. [8.751 seconds] - 2026-07-02T16:17:06.194Z
+
+Watch mode enabled. Watching for file changes...
+NOTE: Raw file sizes do not reflect development server per-request transformations.
+  [32m➜[39m  [1mLocal[22m:   [36mhttp://127.0.0.1:[1m4300[22m/[39m
+[33m>[39m Changes detected. Rebuilding...
+[32m√[39m Changes detected. Rebuilding...
+[1mInitial chunk files[22m[2m | [22m[1mNames[22m[2m | [22m[1mRaw size[22m[2m | [22m[1mEstimated transfer size[22m
+[32mmain-NSK7C3J5.js[39m   [2m | [22m[2mmain[22m [2m | [22m [36m8.77 kB[39m[2m | [22m                [36m3.10 kB[39m
+
+Application bundle generation complete. [5.413 seconds] - 2026-07-02T16:20:09.924Z
+
+Page reload sent to client(s).
+[33m>[39m Changes detected. Rebuilding...
+[32m√[39m Changes detected. Rebuilding...
+[1mInitial chunk files[22m[2m | [22m[1mNames[22m[2m | [22m[1mRaw size[22m[2m | [22m[1mEstimated transfer size[22m
+[32mmain-6P734MM2.js[39m   [2m | [22m[2mmain[22m [2m | [22m [36m8.72 kB[39m[2m | [22m                [36m3.07 kB[39m
+
+Application bundle generation complete. [2.972 seconds] - 2026-07-02T16:20:12.909Z
+
+Page reload sent to client(s).
+[33m>[39m Changes detected. Rebuilding...
+[32m√[39m Changes detected. Rebuilding...
+[1mInitial chunk files[22m[2m | [22m[1mNames[22m         [2m | [22m [1mRaw size[22m[2m | [22m[1mEstimated transfer size[22m
+[32mchunk-2H3EQ7RK.js[39m  [2m | [22m[2m-[22m             [2m | [22m[36m298.19 kB[39m[2m | [22m               [36m82.97 kB[39m
+[32mchunk-RNFR5OEX.js[39m  [2m | [22m[2m-[22m             [2m | [22m[36m254.90 kB[39m[2m | [22m               [36m68.96 kB[39m
+[32mchunk-N7LZIIHC.js[39m  [2m | [22m[2m-[22m             [2m | [22m [36m84.01 kB[39m[2m | [22m               [36m21.30 kB[39m
+[32mchunk-IDZQNDFP.js[39m  [2m | [22m[2m-[22m             [2m | [22m [36m22.98 kB[39m[2m | [22m                [36m7.52 kB[39m
+[32mchunk-HS3BZG6J.js[39m  [2m | [22m[2m-[22m             [2m | [22m  [36m9.15 kB[39m[2m | [22m                [36m3.22 kB[39m
+[32mmain-2YP7PXBL.js[39m   [2m | [22m[2mmain[22m          [2m | [22m  [36m8.72 kB[39m[2m | [22m                [36m3.06 kB[39m
+[32mchunk-ZXWEP7DH.js[39m  [2m | [22m[2m-[22m             [2m | [22m  [36m4.24 kB[39m[2m | [22m                [36m1.47 kB[39m
+[32mchunk-I3O24OUD.js[39m  [2m | [22m[2m-[22m             [2m | [22m  [36m1.77 kB[39m[2m | [22m              [36m753 bytes[39m
+
+[1mLazy chunk files[22m   [2m | [22m[1mNames[22m         [2m | [22m [1mRaw size[22m[2m | [22m[1mEstimated transfer size[22m
+[32mchunk-RPE3THQB.js[39m  [2m | [22m[2madmin[22m         [2m | [22m [36m49.28 kB[39m[2m | [22m               [36m10.93 kB[39m
+[32mchunk-Z6LP45JZ.js[39m  [2m | [22m[2m-[22m             [2m | [22m [36m40.72 kB[39m[2m | [22m                [36m8.53 kB[39m
+[32mchunk-726OU3RV.js[39m  [2m | [22m[2mcheckout[22m      [2m | [22m [36m15.84 kB[39m[2m | [22m                [36m4.79 kB[39m
+[32mchunk-KJN2YQZ2.js[39m  [2m | [22m[2mhome[22m          [2m | [22m [36m12.65 kB[39m[2m | [22m                [36m3.50 kB[39m
+[32mchunk-35LGOXUX.js[39m  [2m | [22m[2m-[22m             [2m | [22m [36m12.42 kB[39m[2m | [22m                [36m3.34 kB[39m
+[32mchunk-NH3MCQWJ.js[39m  [2m | [22m[2mlogin[22m         [2m | [22m  [36m8.52 kB[39m[2m | [22m                [36m2.68 kB[39m
+[32mchunk-2OVENBUH.js[39m  [2m | [22m[2mproduct-detail[22m[2m | [22m  [36m6.74 kB[39m[2m | [22m                [36m2.32 kB[39m
+[32mchunk-XZTYSJ2I.js[39m  [2m | [22m[2mcart[22m          [2m | [22m  [36m5.49 kB[39m[2m | [22m                [36m1.77 kB[39m
+[32mchunk-E2AKM4DE.js[39m  [2m | [22m[2morders[22m        [2m | [22m  [36m4.84 kB[39m[2m | [22m                [36m1.79 kB[39m
+[32mchunk-RD2XAU4T.js[39m  [2m | [22m[2m-[22m             [2m | [22m  [36m4.61 kB[39m[2m | [22m                [36m1.66 kB[39m
+
+Application bundle generation complete. [3.635 seconds] - 2026-07-02T16:20:16.559Z
+
+Page reload sent to client(s).
+[33m>[39m Changes detected. Rebuilding...
+[32m√[39m Changes detected. Rebuilding...
+[1mInitial chunk files[22m[2m | [22m[1mNames[22m   [2m | [22m[1mRaw size[22m[2m | [22m[1mEstimated transfer size[22m
+[32mmain-N2LKSKJ6.js[39m   [2m | [22m[2mmain[22m    [2m | [22m [36m8.72 kB[39m[2m | [22m                [36m3.06 kB[39m
+
+[1mLazy chunk files[22m   [2m | [22m[1mNames[22m   [2m | [22m[1mRaw size[22m[2m | [22m[1mEstimated transfer size[22m
+[32mchunk-KPQVM6PL.js[39m  [2m | [22m[2mcheckout[22m[2m | [22m[36m17.05 kB[39m[2m | [22m                [36m5.05 kB[39m
+
+Application bundle generation complete. [3.203 seconds] - 2026-07-02T16:20:34.525Z
+
+Page reload sent to client(s).

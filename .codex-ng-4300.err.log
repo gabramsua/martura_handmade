@@ -1,0 +1,32 @@
+[1m[33mPrebundling has been configured but will not be used because scripts optimization is enabled.[39m[22m
+[1m[33mHot Module Replacement (HMR) is disabled because the 'outputHashing' option is set to 'all'. HMR is incompatible with this setting.[39m[22m
+[1m[33m[33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mbundle initial exceeded maximum budget. Budget 700.00 kB was not met by 19.37 kB with a total of 719.37 kB.[0m
+
+
+[33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1msrc/app/features/admin/admin.css exceeded maximum budget. Budget 6.00 kB was not met by 1.54 kB with a total of 7.54 kB.[0m
+
+[39m[22m
+[1m[33m[33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mbundle initial exceeded maximum budget. Budget 700.00 kB was not met by 19.65 kB with a total of 719.65 kB.[0m
+
+
+[33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1msrc/app/features/admin/admin.css exceeded maximum budget. Budget 6.00 kB was not met by 1.54 kB with a total of 7.54 kB.[0m
+
+[39m[22m
+[1m[33m[33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mbundle initial exceeded maximum budget. Budget 700.00 kB was not met by 19.60 kB with a total of 719.60 kB.[0m
+
+
+[33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1msrc/app/features/admin/admin.css exceeded maximum budget. Budget 6.00 kB was not met by 1.54 kB with a total of 7.54 kB.[0m
+
+[39m[22m
+[1m[33m[33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mbundle initial exceeded maximum budget. Budget 700.00 kB was not met by 19.74 kB with a total of 719.74 kB.[0m
+
+
+[33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1msrc/app/features/admin/admin.css exceeded maximum budget. Budget 6.00 kB was not met by 1.54 kB with a total of 7.54 kB.[0m
+
+[39m[22m
+[1m[33m[33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mbundle initial exceeded maximum budget. Budget 700.00 kB was not met by 19.74 kB with a total of 719.74 kB.[0m
+
+
+[33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1msrc/app/features/admin/admin.css exceeded maximum budget. Budget 6.00 kB was not met by 1.54 kB with a total of 7.54 kB.[0m
+
+[39m[22m

@@ -1,7 +1,7 @@
 import { Routes } from '@angular/router';
 
 import { adminGuard } from './core/guards/admin.guard';
-import { authGuard } from './core/guards/auth.guard';
+import { customerGuard, customerJourneyGuard } from './core/guards/customer.guard';
 
 export const routes: Routes = [
   {
@@ -15,11 +15,12 @@ export const routes: Routes = [
   },
   {
     path: 'carrito',
+    canActivate: [customerJourneyGuard],
     loadComponent: () => import('./features/cart/cart').then((component) => component.Cart),
   },
   {
     path: 'checkout',
-    canActivate: [authGuard],
+    canActivate: [customerGuard],
     loadComponent: () => import('./features/checkout/checkout').then((component) => component.Checkout),
   },
   {
@@ -27,9 +28,14 @@ export const routes: Routes = [
     loadComponent: () => import('./features/login/login').then((component) => component.Login),
   },
   {
-    path: 'pedidos',
-    canActivate: [authGuard],
+    path: 'cuenta',
+    canActivate: [customerGuard],
     loadComponent: () => import('./features/orders/orders').then((component) => component.Orders),
+  },
+  {
+    path: 'pedidos',
+    redirectTo: 'cuenta',
+    pathMatch: 'full',
   },
   {
     path: 'admin',
