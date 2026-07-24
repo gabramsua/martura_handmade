@@ -1,7 +1,8 @@
 import { AsyncPipe, CurrencyPipe } from '@angular/common';
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
-import { MatProgressBarModule } from '@angular/material/progress-bar';
+import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, signal } from '@angular/core';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { RouterLink } from '@angular/router';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { map } from 'rxjs';
 
 import { Campaign } from '../../core/models/campaign.model';
@@ -13,36 +14,52 @@ import {
   ProductSort,
 } from '../../core/models/product.model';
 import { resolveProductPricing } from '../../core/utils/product-pricing';
-import { AuthService } from '../../core/services/auth.service';
+import { AlertsService } from '../../core/services/alerts.service';
 import { CampaignsService } from '../../core/services/campaigns.service';
 import { CartService } from '../../core/services/cart.service';
 import { ProductsService } from '../../core/services/products.service';
+import { ShopSettingsService } from '../../core/services/shop-settings.service';
 
 @Component({
   selector: 'app-home',
-  imports: [AsyncPipe, CurrencyPipe, MatProgressBarModule, RouterLink],
+  imports: [AsyncPipe, CurrencyPipe, MatProgressSpinnerModule, RouterLink],
   templateUrl: './home.html',
   styleUrl: './home.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class Home {
-  private readonly authService = inject(AuthService);
+  private readonly destroyRef = inject(DestroyRef);
+  private readonly alertsService = inject(AlertsService);
   private readonly campaignsService = inject(CampaignsService);
   private readonly productsService = inject(ProductsService);
   private readonly cartService = inject(CartService);
+  private readonly shopSettingsService = inject(ShopSettingsService);
 
+  readonly currentHeroIndex = signal(0);
   readonly loading$ = this.productsService.loading$;
   readonly featuredProducts$ = this.productsService.featuredProducts$;
   readonly filteredProducts$ = this.productsService.filteredProducts$;
   readonly filteredCount$ = this.filteredProducts$.pipe(map((products) => products.length));
   readonly filters$ = this.productsService.filters$;
   readonly categories$ = this.productsService.categories$;
+  readonly subcategories$ = this.productsService.subcategories$;
+  readonly collections$ = this.productsService.collections$;
   readonly catalogCount$ = this.productsService.products$.pipe(
     map((products) => products.filter((product) => isProductVisible(product)).length),
   );
-  readonly collections$ = this.productsService.collections$;
-  readonly isAdmin$ = this.authService.isAdmin$;
-  readonly showAdminAccess$ = this.authService.user$.pipe(map((user) => !user || user.role === 'admin'));
+  readonly heroSlides$ = this.shopSettingsService.heroSlides$;
+  readonly settings$ = this.shopSettingsService.settings$;
+  readonly heroSlides = toSignal(this.heroSlides$, { initialValue: [] });
+  readonly currentHeroSlide = computed(() => {
+    const slides = this.heroSlides();
+
+    if (!slides.length) {
+      return null;
+    }
+
+    const index = this.currentHeroIndex() % slides.length;
+    return slides[index] ?? slides[0];
+  });
   readonly sortOptions: Array<{ value: ProductSort; label: string }> = [
     { value: 'newest', label: 'Novedades' },
     { value: 'price-asc', label: 'Precio ascendente' },
@@ -50,12 +67,30 @@ export class Home {
     { value: 'name', label: 'Nombre' },
   ];
 
+  constructor() {
+    const intervalId = window.setInterval(() => {
+      const slides = this.heroSlides();
+
+      if (slides.length <= 1) {
+        return;
+      }
+
+      this.currentHeroIndex.update((index) => (index + 1) % slides.length);
+    }, 5000);
+
+    this.destroyRef.onDestroy(() => window.clearInterval(intervalId));
+  }
+
   updateQuery(query: string): void {
     this.productsService.updateFilters({ query });
   }
 
   selectCategory(categorySlug: string | null): void {
-    this.productsService.updateFilters({ categorySlug });
+    this.productsService.updateFilters({ categorySlug, subcategorySlug: null });
+  }
+
+  selectSubcategory(subcategorySlug: string | null): void {
+    this.productsService.updateFilters({ subcategorySlug });
   }
 
   selectCollection(collectionSlug: string | null): void {
@@ -75,7 +110,47 @@ export class Home {
   }
 
   addToCart(product: Product): void {
-    this.cartService.addItem(product);
+    this.cartService.addItem(product, product.sizes[0] ?? 'Única');
+  }
+
+  async shareProduct(product: Product): Promise<void> {
+    const shareUrl = new URL(`/producto/${product.slug}`, window.location.origin).toString();
+
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: product.name,
+          text: `${product.name} · Martura Handmade`,
+          url: shareUrl,
+        });
+        return;
+      }
+
+      await navigator.clipboard.writeText(shareUrl);
+      this.alertsService.toast('success', 'Enlace copiado al portapapeles.');
+    } catch {
+      this.alertsService.toast('error', 'No se pudo compartir este producto.');
+    }
+  }
+
+  previousHero(): void {
+    const slides = this.heroSlides();
+
+    if (!slides.length) {
+      return;
+    }
+
+    this.currentHeroIndex.update((index) => (index - 1 + slides.length) % slides.length);
+  }
+
+  nextHero(): void {
+    const slides = this.heroSlides();
+
+    if (!slides.length) {
+      return;
+    }
+
+    this.currentHeroIndex.update((index) => (index + 1) % slides.length);
   }
 
   isAvailable(product: Product): boolean {
@@ -111,11 +186,17 @@ export class Home {
   }
 
   getTaxonomyLabel(product: Product): string {
-    return product.collection ? `${product.category} - ${product.collection}` : product.category;
+    return [product.category, product.subcategory, product.collection].filter(Boolean).join(' · ');
   }
 
   hasActiveFilters(filters: ProductFilters): boolean {
-    return !!filters.query.trim() || !!filters.categorySlug || !!filters.collectionSlug || filters.onlyOffers;
+    return (
+      !!filters.query.trim() ||
+      !!filters.categorySlug ||
+      !!filters.subcategorySlug ||
+      !!filters.collectionSlug ||
+      filters.onlyOffers
+    );
   }
 
   private getResolvedCampaign(product: Product): Campaign | null {

@@ -1,33 +1,25 @@
 import { AsyncPipe, CurrencyPipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
-import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import {
-  AbstractControl,
-  FormBuilder,
-  ReactiveFormsModule,
-  ValidationErrors,
-  Validators,
-} from '@angular/forms';
+import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { map } from 'rxjs';
+import { combineLatest, map, startWith } from 'rxjs';
 
 import { CartItem, CartSummary } from '../../core/models/cart.model';
-import { CheckoutOrder } from '../../core/models/order.model';
+import { cartItemToOrderItem, CheckoutOrder } from '../../core/models/order.model';
 import { resolveProductPricing } from '../../core/utils/product-pricing';
 import { AlertsService } from '../../core/services/alerts.service';
-import { AuthService } from '../../core/services/auth.service';
 import { CampaignsService } from '../../core/services/campaigns.service';
 import { CartService } from '../../core/services/cart.service';
-import { CheckoutService } from '../../core/services/checkout.service';
+import { DiscountCodesService } from '../../core/services/discount-codes.service';
 import { OrderPlacementService } from '../../core/services/order-placement.service';
+import { ShopSettingsService } from '../../core/services/shop-settings.service';
 
 @Component({
   selector: 'app-checkout',
   imports: [
     AsyncPipe,
     CurrencyPipe,
-    MatProgressBarModule,
     MatProgressSpinnerModule,
     ReactiveFormsModule,
     RouterLink,
@@ -39,11 +31,11 @@ import { OrderPlacementService } from '../../core/services/order-placement.servi
 export class Checkout {
   private readonly formBuilder = inject(FormBuilder);
   private readonly alertsService = inject(AlertsService);
-  private readonly authService = inject(AuthService);
   private readonly campaignsService = inject(CampaignsService);
   private readonly cartService = inject(CartService);
-  private readonly checkoutService = inject(CheckoutService);
+  private readonly discountCodesService = inject(DiscountCodesService);
   private readonly orderPlacementService = inject(OrderPlacementService);
+  readonly shopSettingsService = inject(ShopSettingsService);
 
   readonly summary$ = this.cartService.summary$;
   readonly canCheckout$ = this.summary$.pipe(map((summary) => summary.items.length > 0));
@@ -51,33 +43,32 @@ export class Checkout {
     name: ['', [Validators.required, Validators.minLength(2)]],
     email: ['', [Validators.required, Validators.email]],
     phone: ['', [Validators.required, Validators.pattern(/^[0-9+\s]{9,15}$/)]],
-    deliveryMethod: ['shipping' as const, [Validators.required]],
-    addressLine1: [''],
+    dni: ['', [Validators.required, Validators.minLength(8)]],
+    addressLine1: ['', [Validators.required]],
     postalCode: ['', [Validators.required, Validators.pattern(/^\d{5}$/)]],
     city: ['', [Validators.required]],
     province: ['', [Validators.required]],
-    notes: [''],
+    comments: [''],
+    discountCode: [''],
     acceptsPolicies: [false, [Validators.requiredTrue]],
-  }, {
-    validators: [this.shippingAddressValidator],
   });
 
+  readonly discountPreview$ = combineLatest([
+    this.summary$,
+    this.checkoutForm.controls.discountCode.valueChanges.pipe(
+      startWith(this.checkoutForm.controls.discountCode.value),
+    ),
+  ]).pipe(
+    map(([summary, discountCode]) => this.resolveDiscount(summary, discountCode)),
+  );
+  readonly finalTotal$ = combineLatest([this.summary$, this.discountPreview$]).pipe(
+    map(([summary, discount]) => Math.max(0, summary.total - (discount?.amount ?? 0))),
+  );
+
   lastOrder: CheckoutOrder | null = null;
-  whatsappUrl: string | null = null;
   errorMessage: string | null = null;
   submissionMessage: string | null = null;
   isSubmitting = false;
-
-  constructor() {
-    const user = this.authService.currentUser;
-
-    if (user) {
-      this.checkoutForm.patchValue({
-        name: user.name,
-        email: user.email,
-      });
-    }
-  }
 
   async prepareOrder(summary: CartSummary): Promise<void> {
     if (!summary.items.length) {
@@ -96,8 +87,13 @@ export class Checkout {
     try {
       this.isSubmitting = true;
       this.errorMessage = null;
-      this.submissionMessage = 'Validando stock y preparando tu pedido...';
+      this.submissionMessage = 'Validando stock, descuento y total final del pedido...';
       const value = this.checkoutForm.getRawValue();
+      const resolvedDiscount = this.resolveDiscount(summary, value.discountCode);
+
+      if (value.discountCode.trim() && !resolvedDiscount) {
+        throw new Error('Ese código no existe, no está activo o no aplica a los productos de este pedido.');
+      }
 
       const order = await this.orderPlacementService.placeOrder(
         summary,
@@ -105,25 +101,22 @@ export class Checkout {
           name: value.name,
           email: value.email,
           phone: value.phone,
-          deliveryMethod: value.deliveryMethod,
-          addressLine1: value.deliveryMethod === 'shipping'
-            ? value.addressLine1
-            : null,
+          dni: value.dni,
+          deliveryMethod: 'shipping',
+          addressLine1: value.addressLine1,
           postalCode: value.postalCode,
           city: value.city,
           province: value.province,
-          notes: value.notes || null,
+          comments: value.comments || null,
         },
-        this.authService.currentUser?.id ?? 'mock-user',
+        value.discountCode || null,
       );
 
-      this.submissionMessage = 'Preparando la confirmación y el mensaje de WhatsApp...';
       this.lastOrder = order;
-      this.whatsappUrl = this.checkoutService.buildWhatsappUrl(order);
       this.cartService.clear();
       await this.alertsService.success(
-        'Pedido preparado',
-        'Hemos registrado el pedido y dejado listo el mensaje de WhatsApp para enviarlo.',
+        'Pedido creado',
+        'Tu pedido ya está registrado. Ahora puedes completar el pago por Bizum con la referencia indicada.',
       );
     } catch (error) {
       this.errorMessage = error instanceof Error
@@ -143,36 +136,18 @@ export class Checkout {
     );
   }
 
-  get isShipping(): boolean {
-    return this.checkoutForm.controls.deliveryMethod.value === 'shipping';
-  }
-
-  get addressErrorMessage(): string | null {
-    return this.checkoutForm.errors?.['missingAddress']
-      ? 'La dirección es obligatoria cuando el pedido va con envío.'
-      : null;
-  }
-
-  get deliveryHelpText(): string {
-    return this.isShipping
-      ? 'Te pediremos la dirección completa para preparar el envío.'
-      : 'Si eliges recogida, no necesitamos dirección postal.';
-  }
-
-  getDeliveryLabel(method: 'shipping' | 'pickup'): string {
-    return method === 'shipping' ? 'Envío' : 'Recogida';
-  }
-
   getControlErrorMessage(
     controlName:
       | 'name'
       | 'email'
       | 'phone'
+      | 'dni'
       | 'addressLine1'
       | 'postalCode'
       | 'city'
       | 'province'
-      | 'acceptsPolicies',
+      | 'acceptsPolicies'
+      | 'discountCode',
   ): string | null {
     const control = this.checkoutForm.controls[controlName];
 
@@ -188,6 +163,10 @@ export class Checkout {
           return 'Necesitamos un correo para asociar el pedido.';
         case 'phone':
           return 'Necesitamos un teléfono de contacto.';
+        case 'dni':
+          return 'El DNI es obligatorio para cerrar el pedido.';
+        case 'addressLine1':
+          return 'La dirección de envío es obligatoria.';
         case 'postalCode':
           return 'El código postal es obligatorio.';
         case 'city':
@@ -199,8 +178,14 @@ export class Checkout {
       }
     }
 
-    if (control.hasError('minlength') && controlName === 'name') {
-      return 'Escribe al menos 2 caracteres.';
+    if (control.hasError('minlength')) {
+      if (controlName === 'name') {
+        return 'Escribe al menos 2 caracteres.';
+      }
+
+      if (controlName === 'dni') {
+        return 'El DNI parece demasiado corto.';
+      }
     }
 
     if (control.hasError('email')) {
@@ -222,18 +207,19 @@ export class Checkout {
       return 'Debes aceptar el uso de datos para continuar.';
     }
 
-    return null;
-  }
-
-  private shippingAddressValidator(control: AbstractControl): ValidationErrors | null {
-    const deliveryMethod = control.get('deliveryMethod')?.value as 'shipping' | 'pickup' | undefined;
-    const addressLine1 = String(control.get('addressLine1')?.value ?? '').trim();
-
-    if (deliveryMethod === 'shipping' && !addressLine1) {
-      return { missingAddress: true };
+    if (control.hasError('invalidDiscountCode')) {
+      return 'Ese código no existe, no está activo o no aplica a este pedido.';
     }
 
     return null;
+  }
+
+  private resolveDiscount(summary: CartSummary, discountCode: string | null) {
+    const orderItems = summary.items.map((item) =>
+      cartItemToOrderItem(item, this.campaignsService.activeCampaignsSnapshot),
+    );
+
+    return this.discountCodesService.resolveDiscount(discountCode, orderItems);
   }
 
   private getCheckoutValidationMessage(): string {
@@ -249,8 +235,12 @@ export class Checkout {
       return 'Revisa el teléfono de contacto antes de continuar.';
     }
 
-    if (this.checkoutForm.errors?.['missingAddress']) {
-      return 'Completa la dirección de envío para continuar.';
+    if (this.checkoutForm.controls.dni.invalid) {
+      return 'Revisa el DNI antes de continuar.';
+    }
+
+    if (this.checkoutForm.controls.addressLine1.invalid) {
+      return 'Completa la dirección de envío antes de continuar.';
     }
 
     if (this.checkoutForm.controls.postalCode.invalid) {

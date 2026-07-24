@@ -8,7 +8,7 @@
     @if (user$ | async; as user) {
       <div class="current-user">
         <strong>{{ user.name }}</strong>
-        <span>{{ user.email }} &middot; {{ user.role }}</span>
+        <span>{{ user.email }} · {{ user.role }}</span>
         <button type="button" (click)="logout()">Cerrar sesión</button>
       </div>
     }
@@ -22,15 +22,11 @@
         <div>
           <p class="provider-title">Google</p>
           <p class="provider-copy">
-            {{ requestedRole === 'admin'
-              ? 'Se abrirá el selector de cuenta de Google. Usa el correo autorizado para entrar al dashboard.'
-              : 'Tus pedidos quedarán asociados a la cuenta con la que entres y podrás consultarlos después.' }}
+            Se abrirá el selector de cuenta de Google. Usa el correo autorizado para entrar al dashboard.
           </p>
         </div>
 
-        @if (requestedRole === 'admin') {
-          <p class="admin-hint">Correo administrador autorizado: {{ adminEmail || 'Sin configurar' }}</p>
-        }
+        <p class="admin-hint">Correo administrador autorizado: {{ adminEmail || 'Sin configurar' }}</p>
 
         @if (errorMessage) {
           <p class="login-error">{{ errorMessage }}</p>
@@ -63,17 +59,12 @@
 
         <label>
           Rol
-          <select formControlName="role">
-            <option value="customer">Cliente</option>
-            <option value="admin">Admin</option>
-          </select>
+          <input type="text" value="Administrador" disabled />
         </label>
 
         @if (isEmulatorMode) {
           <p class="provider-copy">
-            {{ requestedRole === 'admin'
-              ? 'Usaremos el correo administrador configurado y una clave fija de desarrollo dentro del Auth emulator.'
-              : 'Se creará o reutilizará una cuenta local del emulador con este correo.' }}
+            Usaremos el correo administrador configurado y una clave fija de desarrollo dentro del Auth emulator.
           </p>
         }
 

@@ -1,4 +1,4 @@
-export type TaxonomyType = 'category' | 'collection';
+export type TaxonomyType = 'category' | 'subcategory' | 'collection';
 
 export interface CatalogTaxonomy {
   id: string;

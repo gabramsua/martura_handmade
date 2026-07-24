@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase-admin/app';
-import { DocumentReference, getFirestore, Timestamp, Transaction } from 'firebase-admin/firestore';
+import { DocumentReference, Timestamp, Transaction, getFirestore } from 'firebase-admin/firestore';
 import { CallableRequest, HttpsError, onCall } from 'firebase-functions/v2/https';
 import { setGlobalOptions } from 'firebase-functions/v2/options';
 
@@ -7,8 +7,7 @@ initializeApp();
 setGlobalOptions({ region: 'europe-west1', maxInstances: 10 });
 
 const db = getFirestore();
-const SHIPPING_PRICE = 4.95;
-const FREE_SHIPPING_THRESHOLD = 75;
+const DEFAULT_SHIPPING_PRICE = 4.95;
 const ADMIN_EMAILS = (
   process.env.ADMIN_EMAILS ??
   'gabramsua@gmail.com'
@@ -17,22 +16,25 @@ const ADMIN_EMAILS = (
   .map((email) => email.trim().toLowerCase())
   .filter(Boolean);
 
-type DeliveryMethod = 'shipping' | 'pickup';
+type DeliveryMethod = 'shipping';
 type ProductStatus = 'active' | 'sold_out' | 'hidden';
 type ProductPricingMode = 'regular' | 'individual_offer' | 'campaign';
-type OrderStatus = 'new' | 'confirmed' | 'prepared' | 'completed' | 'cancelled';
+type OrderStatus = 'in_factory' | 'accepted' | 'shipped' | 'delivered' | 'cancelled';
 type CampaignDiscountType = 'percentage' | 'fixed';
+type DiscountCodeType = 'percentage' | 'fixed';
+type DiscountCodeScope = 'all' | 'products';
 
 interface CustomerContact {
   name: string;
   email: string;
   phone: string;
+  dni: string;
   deliveryMethod: DeliveryMethod;
-  addressLine1: string | null;
+  addressLine1: string;
   postalCode: string;
   city: string;
   province: string;
-  notes: string | null;
+  comments: string | null;
 }
 
 interface OrderRequestItem {
@@ -47,6 +49,8 @@ interface OrderItem {
   imageUrl: string;
   category?: string | null;
   categorySlug?: string | null;
+  subcategory?: string | null;
+  subcategorySlug?: string | null;
   collection?: string | null;
   collectionSlug?: string | null;
   campaignId?: string | null;
@@ -57,37 +61,22 @@ interface OrderItem {
   lineTotal: number;
 }
 
+interface AppliedDiscountCode {
+  code: string;
+  description: string;
+  amount: number;
+}
+
 interface CheckoutOrder {
   id: string;
-  userId: string;
   customer: CustomerContact;
   items: OrderItem[];
   subtotal: number;
+  discount: AppliedDiscountCode | null;
   shipping: number;
   total: number;
-  channel: 'whatsapp';
+  paymentMethod: 'bizum';
   status: OrderStatus;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-interface CustomerProfile {
-  id: string;
-  userId: string;
-  name: string;
-  email: string;
-  phone: string | null;
-  deliveryMethodPreference: DeliveryMethod | null;
-  addressLine1: string | null;
-  postalCode: string;
-  city: string;
-  province: string;
-  notes: string | null;
-  totalOrders: number;
-  totalSpent: number;
-  lastOrderId: string | null;
-  lastOrderStatus: OrderStatus | null;
-  lastOrderAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -100,6 +89,7 @@ interface SerializedCheckoutOrder extends Omit<CheckoutOrder, 'createdAt' | 'upd
 interface CreateOrderPayload {
   customer: CustomerContact;
   items: OrderRequestItem[];
+  discountCode: string | null;
 }
 
 interface UpdateOrderStatusPayload {
@@ -107,20 +97,13 @@ interface UpdateOrderStatusPayload {
   status: OrderStatus;
 }
 
-interface SeedDemoCatalogResult {
-  productsSeeded: number;
-  campaignsSeeded: number;
-}
-
-interface RebuildCustomerProfilesResult {
-  customersSynced: number;
-}
-
 interface StoredProduct {
   name?: string;
   imageUrl?: string;
   category?: string;
   categorySlug?: string;
+  subcategory?: string | null;
+  subcategorySlug?: string | null;
   collection?: string | null;
   collectionSlug?: string | null;
   originalPrice?: number;
@@ -133,75 +116,45 @@ interface StoredProduct {
 }
 
 interface StoredCampaign {
-  name?: string;
-  badge?: string;
-  discountType?: CampaignDiscountType;
-  discountValue?: number;
-  active?: boolean;
-  startsAt?: Timestamp | Date | null;
-  endsAt?: Timestamp | Date | null;
-}
-
-interface CampaignPricing {
+  id: string;
   name: string;
   badge: string;
   discountType: CampaignDiscountType;
   discountValue: number;
   active: boolean;
-  startsAt: Date | null;
-  endsAt: Date | null;
+  startsAt: Date | Timestamp | null;
+  endsAt: Date | Timestamp | null;
 }
 
-interface AppliedCampaignPricing {
+interface StoredDiscountCode {
   id: string;
-  name: string | null;
-  effectivePrice: number;
+  code: string;
+  description: string;
+  type: DiscountCodeType;
+  value: number;
+  active: boolean;
+  scope: DiscountCodeScope;
+  productIds: string[];
+  startsAt: Date | Timestamp | null;
+  endsAt: Date | Timestamp | null;
+}
+
+interface StoredShopSettings {
+  shippingPrice?: number;
 }
 
 const allowedTransitions: Record<OrderStatus, OrderStatus[]> = {
-  new: ['confirmed', 'cancelled'],
-  confirmed: ['prepared', 'cancelled'],
-  prepared: ['completed', 'cancelled'],
-  completed: [],
-  cancelled: ['new'],
+  in_factory: ['accepted', 'cancelled'],
+  accepted: ['shipped', 'cancelled'],
+  shipped: ['delivered', 'cancelled'],
+  delivered: [],
+  cancelled: ['in_factory'],
 };
 
-export const seedDemoCatalog = onCall<Record<string, never>, Promise<SeedDemoCatalogResult>>(async () => {
-  assertFunctionsEmulator();
-
-  return db.runTransaction(async (transaction: Transaction) => {
-    const productsCollection = db.collection('products');
-    const campaignsCollection = db.collection('campaigns');
-    const [productsSnapshot, campaignsSnapshot] = await Promise.all([
-      transaction.get(productsCollection),
-      transaction.get(campaignsCollection),
-    ]);
-
-    let productsSeeded = 0;
-    let campaignsSeeded = 0;
-
-    if (productsSnapshot.empty) {
-      for (const product of DEMO_PRODUCTS) {
-        transaction.set(productsCollection.doc(product.id), product);
-        productsSeeded += 1;
-      }
-    }
-
-    if (campaignsSnapshot.empty) {
-      for (const campaign of DEMO_CAMPAIGNS) {
-        transaction.set(campaignsCollection.doc(campaign.id), campaign);
-        campaignsSeeded += 1;
-      }
-    }
-
-    return { productsSeeded, campaignsSeeded };
-  });
-});
-
 export const createOrder = onCall<CreateOrderPayload>(async (request: CallableRequest<CreateOrderPayload>) => {
-  const auth = assertAuthenticated(request.auth);
   const customer = normalizeCustomer(request.data?.customer);
   const items = normalizeRequestedItems(request.data?.items);
+  const discountCode = sanitizeString(request.data?.discountCode).toUpperCase() || null;
   const groupedQuantities = groupRequestedItems(items);
   const orderRef = db.collection('orders').doc();
   let createdOrder: CheckoutOrder | null = null;
@@ -209,84 +162,90 @@ export const createOrder = onCall<CreateOrderPayload>(async (request: CallableRe
   await db.runTransaction(async (transaction: Transaction) => {
     const productEntries = await readProducts(transaction, Array.from(groupedQuantities.keys()));
     const campaignEntries = await readCampaigns(transaction, productEntries);
-    const customerRef = getCustomerRef(auth.uid);
-    const customerSnapshot = await transaction.get(customerRef);
-    const existingCustomer = customerSnapshot.exists
-      ? reviveCustomerProfile(customerSnapshot.id, customerSnapshot.data() as Partial<CustomerProfile>)
-      : null;
+    const settings = await readSettings(transaction);
     const orderItems: OrderItem[] = [];
 
-    for (const [productId, quantity] of groupedQuantities.entries()) {
-      const productEntry = productEntries.get(productId);
-      const firstItem = items.find((item) => item.productId === productId);
+    for (const item of items) {
+      const productEntry = productEntries.get(item.productId);
 
-      if (!productEntry || !firstItem) {
-        throw new HttpsError('not-found', `La pieza "${firstItem?.productId ?? productId}" ya no esta disponible.`);
+      if (!productEntry) {
+        throw new HttpsError('not-found', `La pieza "${item.productId}" ya no está disponible.`);
       }
 
-      const { product, ref } = productEntry;
+      const { product } = productEntry;
       const currentStock = typeof product.stock === 'number' ? product.stock : 0;
       const currentStatus = normalizeProductStatus(product.status, currentStock);
+      const requiredQuantity = groupedQuantities.get(item.productId) ?? item.quantity;
 
       if (!isProductVisible(currentStatus)) {
-        throw new HttpsError('failed-precondition', `La pieza "${product.name ?? productId}" ya no esta disponible.`);
+        throw new HttpsError('failed-precondition', `La pieza "${product.name ?? item.productId}" ya no está disponible.`);
       }
 
-      if (currentStock < quantity) {
+      if (currentStock < requiredQuantity) {
         throw new HttpsError(
           'failed-precondition',
-          `Solo quedan ${currentStock} unidades de "${product.name ?? productId}".`,
+          `Solo quedan ${currentStock} unidades de "${product.name ?? item.productId}".`,
         );
       }
 
-      const unitPrice = resolveProductPrice(product, campaignEntries);
-      const appliedCampaign = resolveAppliedCampaignPricing(product, campaignEntries);
+      const pricing = resolveProductPrice(product, campaignEntries);
+      orderItems.push({
+        productId: item.productId,
+        productName: product.name ?? item.productId,
+        imageUrl: product.imageUrl ?? '',
+        category: sanitizeString(product.category) || null,
+        categorySlug: sanitizeString(product.categorySlug) || null,
+        subcategory: sanitizeString(product.subcategory) || null,
+        subcategorySlug: sanitizeString(product.subcategorySlug) || null,
+        collection: sanitizeString(product.collection) || null,
+        collectionSlug: sanitizeString(product.collectionSlug) || null,
+        campaignId: pricing.campaignId,
+        campaignName: pricing.campaignName,
+        quantity: item.quantity,
+        variant: item.variant,
+        unitPrice: pricing.effectivePrice,
+        lineTotal: normalizeMoney(pricing.effectivePrice * item.quantity),
+      });
+    }
 
-      for (const item of items.filter((entry) => entry.productId === productId)) {
-        orderItems.push({
-          productId,
-          productName: product.name ?? productId,
-          imageUrl: product.imageUrl ?? '',
-          category: sanitizeString(product.category) || null,
-          categorySlug: sanitizeString(product.categorySlug) || null,
-          collection: sanitizeString(product.collection) || null,
-          collectionSlug: sanitizeString(product.collectionSlug) || null,
-          campaignId: appliedCampaign?.id ?? null,
-          campaignName: appliedCampaign?.name ?? null,
-          quantity: item.quantity,
-          variant: item.variant,
-          unitPrice,
-          lineTotal: normalizeMoney(unitPrice * item.quantity),
-        });
+    for (const [productId, quantity] of groupedQuantities.entries()) {
+      const productEntry = productEntries.get(productId);
+
+      if (!productEntry) {
+        continue;
       }
 
+      const currentStock = typeof productEntry.product.stock === 'number' ? productEntry.product.stock : 0;
       const nextStock = currentStock - quantity;
-      transaction.update(ref, {
+
+      transaction.update(productEntry.ref, {
         stock: nextStock,
-        status: normalizeProductStatus(currentStatus, nextStock),
+        status: normalizeProductStatus(productEntry.product.status, nextStock),
       });
     }
 
     const subtotal = normalizeMoney(orderItems.reduce((total, item) => total + item.lineTotal, 0));
-    const shipping = calculateShipping(subtotal);
+    const discount = discountCode
+      ? await resolveDiscountCode(transaction, discountCode, orderItems)
+      : null;
+    const shipping = subtotal > 0 ? settings.shippingPrice : 0;
     const now = new Date();
 
     createdOrder = {
       id: orderRef.id,
-      userId: auth.uid,
       customer,
       items: orderItems,
       subtotal,
-      shipping,
-      total: normalizeMoney(subtotal + shipping),
-      channel: 'whatsapp',
-      status: 'new',
+      discount,
+      shipping: normalizeMoney(shipping),
+      total: normalizeMoney(subtotal - (discount?.amount ?? 0) + shipping),
+      paymentMethod: 'bizum',
+      status: 'in_factory',
       createdAt: now,
       updatedAt: now,
     };
 
     transaction.set(orderRef, createdOrder);
-    transaction.set(customerRef, mergeOrderIntoCustomerProfile(existingCustomer, createdOrder));
   });
 
   if (!createdOrder) {
@@ -296,179 +255,71 @@ export const createOrder = onCall<CreateOrderPayload>(async (request: CallableRe
   return serializeOrder(createdOrder);
 });
 
-export const rebuildCustomerProfiles = onCall<Record<string, never>, Promise<RebuildCustomerProfilesResult>>(
-  async (request: CallableRequest<Record<string, never>>) => {
-    assertAdmin(request.auth);
-
-    const [ordersSnapshot, customersSnapshot] = await Promise.all([
-      db.collection('orders').get(),
-      db.collection('customers').get(),
-    ]);
-    const customersByUser = new Map<string, CustomerProfile>();
-
-    for (const orderDoc of ordersSnapshot.docs) {
-      const order = reviveOrder(orderDoc.id, orderDoc.data() as Partial<CheckoutOrder>);
-      const existing = customersByUser.get(order.userId);
-      customersByUser.set(order.userId, mergeOrderIntoCustomerProfile(existing ?? null, order));
-    }
-
-    const batch = db.batch();
-
-    for (const customerDoc of customersSnapshot.docs) {
-      batch.delete(customerDoc.ref);
-    }
-
-    for (const customer of customersByUser.values()) {
-      batch.set(getCustomerRef(customer.userId), customer);
-    }
-
-    await batch.commit();
-
-    return {
-      customersSynced: customersByUser.size,
-    };
-  },
-);
-
 export const updateOrderStatus = onCall<UpdateOrderStatusPayload>(
   async (request: CallableRequest<UpdateOrderStatusPayload>) => {
-  assertAdmin(request.auth);
+    assertAdmin(request.auth);
 
-  const orderId = normalizeOrderId(request.data?.orderId);
-  const nextStatus = normalizeTargetStatus(request.data?.status);
-  const orderRef = db.collection('orders').doc(orderId);
-  let updatedOrder: CheckoutOrder | null = null;
+    const orderId = requireText(request.data?.orderId, 'Falta el identificador del pedido.');
+    const nextStatus = normalizeTargetStatus(request.data?.status);
+    const orderRef = db.collection('orders').doc(orderId);
+    let updatedOrder: CheckoutOrder | null = null;
 
-  await db.runTransaction(async (transaction: Transaction) => {
-    const orderSnapshot = await transaction.get(orderRef);
+    await db.runTransaction(async (transaction: Transaction) => {
+      const orderSnapshot = await transaction.get(orderRef);
 
-    if (!orderSnapshot.exists) {
-      throw new HttpsError('not-found', 'No se encontro el pedido que intentas actualizar.');
-    }
-
-    const currentOrder = reviveOrder(orderSnapshot.id, orderSnapshot.data() as Partial<CheckoutOrder>);
-    const customerRef = getCustomerRef(currentOrder.userId);
-    const customerSnapshot = await transaction.get(customerRef);
-    const existingCustomer = customerSnapshot.exists
-      ? reviveCustomerProfile(customerSnapshot.id, customerSnapshot.data() as Partial<CustomerProfile>)
-      : createCustomerProfileFromOrder(currentOrder);
-
-    if (currentOrder.status === nextStatus) {
-      updatedOrder = currentOrder;
-      return;
-    }
-
-    if (!allowedTransitions[currentOrder.status].includes(nextStatus)) {
-      throw new HttpsError(
-        'failed-precondition',
-        `No se puede pasar de "${currentOrder.status}" a "${nextStatus}".`,
-      );
-    }
-
-    const groupedQuantities = groupOrderItems(currentOrder.items);
-
-    if (shouldReleaseInventory(currentOrder.status, nextStatus)) {
-      const productEntries = await readProducts(transaction, Array.from(groupedQuantities.keys()));
-
-      for (const [productId, quantity] of groupedQuantities.entries()) {
-        const productEntry = productEntries.get(productId);
-
-        if (!productEntry) {
-          continue;
-        }
-
-        const currentStock = typeof productEntry.product.stock === 'number' ? productEntry.product.stock : 0;
-        const currentStatus = normalizeProductStatus(productEntry.product.status, currentStock);
-        const nextStock = currentStock + quantity;
-
-        transaction.update(productEntry.ref, {
-          stock: nextStock,
-          status: normalizeProductStatus(currentStatus, nextStock),
-        });
+      if (!orderSnapshot.exists) {
+        throw new HttpsError('not-found', 'No se encontró el pedido que intentas actualizar.');
       }
-    }
 
-    if (shouldReserveInventory(currentOrder.status, nextStatus)) {
-      const productEntries = await readProducts(transaction, Array.from(groupedQuantities.keys()));
+      const currentOrder = reviveOrder(orderSnapshot.id, orderSnapshot.data() as Partial<CheckoutOrder>);
 
-      for (const [productId, quantity] of groupedQuantities.entries()) {
-        const productEntry = productEntries.get(productId);
-        const item = currentOrder.items.find((entry) => entry.productId === productId);
-
-        if (!productEntry) {
-          throw new HttpsError('not-found', `La pieza "${item?.productName ?? productId}" ya no esta disponible.`);
-        }
-
-        const currentStock = typeof productEntry.product.stock === 'number' ? productEntry.product.stock : 0;
-        const currentStatus = normalizeProductStatus(productEntry.product.status, currentStock);
-
-        if (!isProductVisible(currentStatus)) {
-          throw new HttpsError(
-            'failed-precondition',
-            `La pieza "${item?.productName ?? productId}" ya no esta disponible.`,
-          );
-        }
-
-        if (currentStock < quantity) {
-          throw new HttpsError(
-            'failed-precondition',
-            `Solo quedan ${currentStock} unidades de "${item?.productName ?? productId}".`,
-          );
-        }
-
-        const nextStock = currentStock - quantity;
-
-        transaction.update(productEntry.ref, {
-          stock: nextStock,
-          status: normalizeProductStatus(currentStatus, nextStock),
-        });
+      if (currentOrder.status === nextStatus) {
+        updatedOrder = currentOrder;
+        return;
       }
-    }
 
-    const nextOrder: CheckoutOrder = {
-      ...currentOrder,
-      status: nextStatus,
-      updatedAt: new Date(),
-    };
+      if (!allowedTransitions[currentOrder.status].includes(nextStatus)) {
+        throw new HttpsError(
+          'failed-precondition',
+          `No se puede pasar de "${currentOrder.status}" a "${nextStatus}".`,
+        );
+      }
 
-    transaction.update(orderRef, {
-      status: nextOrder.status,
-      updatedAt: nextOrder.updatedAt,
+      const groupedQuantities = groupOrderItems(currentOrder.items);
+
+      if (shouldReleaseInventory(currentOrder.status, nextStatus)) {
+        await applyInventoryAdjustment(transaction, groupedQuantities, 'release');
+      }
+
+      if (shouldReserveInventory(currentOrder.status, nextStatus)) {
+        await applyInventoryAdjustment(transaction, groupedQuantities, 'reserve');
+      }
+
+      updatedOrder = {
+        ...currentOrder,
+        status: nextStatus,
+        updatedAt: new Date(),
+      };
+
+      transaction.update(orderRef, {
+        status: updatedOrder.status,
+        updatedAt: updatedOrder.updatedAt,
+      });
     });
 
-    transaction.set(customerRef, applyOrderStatusToCustomerProfile(existingCustomer, currentOrder, nextOrder));
+    if (!updatedOrder) {
+      throw new HttpsError('internal', 'No se pudo actualizar el pedido.');
+    }
 
-    updatedOrder = nextOrder;
-  });
-
-  if (!updatedOrder) {
-    throw new HttpsError('internal', 'No se pudo actualizar el pedido.');
-  }
-
-  return serializeOrder(updatedOrder);
+    return serializeOrder(updatedOrder);
   },
 );
 
-function assertAuthenticated(auth: { uid: string } | null | undefined): { uid: string } {
-  if (!auth?.uid) {
-    throw new HttpsError('unauthenticated', 'Debes iniciar sesion para crear pedidos.');
-  }
-
-  return auth;
-}
-
-function assertFunctionsEmulator(): void {
-  if (process.env['FUNCTIONS_EMULATOR'] !== 'true') {
-    throw new HttpsError('permission-denied', 'Esta operacion solo esta disponible en el entorno local.');
-  }
-}
-
 function assertAdmin(auth: { uid: string; token?: { email?: string } } | null | undefined): void {
-  const session = assertAuthenticated(auth);
   const email = auth?.token?.email?.toLowerCase();
 
-  if (!email || !ADMIN_EMAILS.includes(email)) {
-    throw new HttpsError('permission-denied', `La cuenta ${session.uid} no tiene permisos de administracion.`);
+  if (!auth?.uid || !email || !ADMIN_EMAILS.includes(email)) {
+    throw new HttpsError('permission-denied', 'Tu cuenta no tiene permisos de administración.');
   }
 }
 
@@ -478,38 +329,25 @@ function normalizeCustomer(customer: unknown): CustomerContact {
   }
 
   const record = customer as Record<string, unknown>;
-  const deliveryMethod = record['deliveryMethod'] === 'pickup' ? 'pickup' : 'shipping';
-  const addressLine1 = sanitizeString(record['addressLine1']);
-  const postalCode = sanitizeString(record['postalCode']);
-  const city = sanitizeString(record['city']);
-  const province = sanitizeString(record['province']);
-
   const normalized: CustomerContact = {
     name: requireText(record['name'], 'El nombre es obligatorio.'),
     email: requireText(record['email'], 'El email es obligatorio.'),
-    phone: requireText(record['phone'], 'El telefono es obligatorio.'),
-    deliveryMethod,
-    addressLine1: deliveryMethod === 'shipping' ? addressLine1 : null,
-    postalCode,
-    city,
-    province,
-    notes: sanitizeString(record['notes']) || null,
+    phone: requireText(record['phone'], 'El teléfono es obligatorio.'),
+    dni: requireText(record['dni'], 'El DNI es obligatorio.'),
+    deliveryMethod: 'shipping',
+    addressLine1: requireText(record['addressLine1'], 'La dirección es obligatoria.'),
+    postalCode: requireText(record['postalCode'], 'El código postal es obligatorio.'),
+    city: requireText(record['city'], 'La ciudad es obligatoria.'),
+    province: requireText(record['province'], 'La provincia es obligatoria.'),
+    comments: sanitizeString(record['comments']) || null,
   };
 
-  if (deliveryMethod === 'shipping' && !normalized.addressLine1) {
-    throw new HttpsError('invalid-argument', 'La direccion es obligatoria para envios.');
-  }
-
   if (!/^\d{5}$/.test(normalized.postalCode)) {
-    throw new HttpsError('invalid-argument', 'El codigo postal debe tener 5 digitos.');
+    throw new HttpsError('invalid-argument', 'El código postal debe tener 5 dígitos.');
   }
 
   if (!/^[0-9+\s]{9,15}$/.test(normalized.phone)) {
-    throw new HttpsError('invalid-argument', 'El telefono no tiene un formato valido.');
-  }
-
-  if (!normalized.city || !normalized.province) {
-    throw new HttpsError('invalid-argument', 'La ciudad y la provincia son obligatorias.');
+    throw new HttpsError('invalid-argument', 'El teléfono no tiene un formato válido.');
   }
 
   return normalized;
@@ -522,7 +360,7 @@ function normalizeRequestedItems(items: unknown): OrderRequestItem[] {
 
   return items.map((item) => {
     if (!item || typeof item !== 'object') {
-      throw new HttpsError('invalid-argument', 'Hay lineas de pedido invalidas.');
+      throw new HttpsError('invalid-argument', 'Hay líneas de pedido inválidas.');
     }
 
     const record = item as Record<string, unknown>;
@@ -531,36 +369,11 @@ function normalizeRequestedItems(items: unknown): OrderRequestItem[] {
     const quantity = Number(record['quantity']);
 
     if (!Number.isInteger(quantity) || quantity <= 0) {
-      throw new HttpsError('invalid-argument', `La cantidad del producto ${productId} no es valida.`);
+      throw new HttpsError('invalid-argument', `La cantidad del producto ${productId} no es válida.`);
     }
 
-    return {
-      productId,
-      variant,
-      quantity,
-    };
+    return { productId, quantity, variant };
   });
-}
-
-function normalizeOrderId(orderId: unknown): string {
-  return requireText(orderId, 'Falta el identificador del pedido.');
-}
-
-function getCustomerRef(userId: string): DocumentReference {
-  return db.collection('customers').doc(userId);
-}
-
-function normalizeTargetStatus(status: unknown): OrderStatus {
-  switch (status) {
-    case 'new':
-    case 'confirmed':
-    case 'prepared':
-    case 'completed':
-    case 'cancelled':
-      return status;
-    default:
-      throw new HttpsError('invalid-argument', 'El nuevo estado del pedido no es valido.');
-  }
 }
 
 function requireText(value: unknown, message: string): string {
@@ -575,6 +388,74 @@ function requireText(value: unknown, message: string): string {
 
 function sanitizeString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
+}
+
+function normalizeTargetStatus(status: unknown): OrderStatus {
+  switch (status) {
+    case 'in_factory':
+    case 'accepted':
+    case 'shipped':
+    case 'delivered':
+    case 'cancelled':
+      return status;
+    default:
+      throw new HttpsError('invalid-argument', 'El nuevo estado del pedido no es válido.');
+  }
+}
+
+function normalizeProductStatus(status: ProductStatus | undefined, stock: number): ProductStatus {
+  if (status === 'hidden') {
+    return 'hidden';
+  }
+
+  if (stock <= 0) {
+    return 'sold_out';
+  }
+
+  return 'active';
+}
+
+function isProductVisible(status: ProductStatus): boolean {
+  return status !== 'hidden';
+}
+
+function normalizeMoney(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+function normalizeNullableDate(value: Date | Timestamp | null | undefined): Date | null {
+  if (!value) {
+    return null;
+  }
+
+  if (value instanceof Date) {
+    return value;
+  }
+
+  return value.toDate();
+}
+
+function normalizeProductCampaignIds(product: StoredProduct): string[] {
+  const explicitCampaignIds = Array.isArray(product.campaignIds)
+    ? product.campaignIds.filter((campaignId): campaignId is string => typeof campaignId === 'string')
+    : [];
+  const legacyCampaignId = typeof product.campaignId === 'string' ? product.campaignId.trim() : '';
+
+  return Array.from(new Set([...explicitCampaignIds, legacyCampaignId].map((campaignId) => campaignId.trim()).filter(Boolean)));
+}
+
+function groupRequestedItems(items: OrderRequestItem[]): Map<string, number> {
+  return items.reduce((quantities, item) => {
+    quantities.set(item.productId, (quantities.get(item.productId) ?? 0) + item.quantity);
+    return quantities;
+  }, new Map<string, number>());
+}
+
+function groupOrderItems(items: OrderItem[]): Map<string, number> {
+  return items.reduce((quantities, item) => {
+    quantities.set(item.productId, (quantities.get(item.productId) ?? 0) + item.quantity);
+    return quantities;
+  }, new Map<string, number>());
 }
 
 async function readProducts(
@@ -601,13 +482,13 @@ async function readProducts(
 async function readCampaigns(
   transaction: Transaction,
   productEntries: Map<string, { ref: DocumentReference; product: StoredProduct }>,
-): Promise<Map<string, CampaignPricing>> {
-  const campaigns = new Map<string, CampaignPricing>();
+): Promise<Map<string, StoredCampaign>> {
+  const campaigns = new Map<string, StoredCampaign>();
   const campaignIds = Array.from(
     new Set(
       Array.from(productEntries.values())
         .flatMap(({ product }) => normalizeProductCampaignIds(product))
-        .filter((campaignId): campaignId is string => typeof campaignId === 'string' && !!campaignId),
+        .filter(Boolean),
     ),
   );
 
@@ -615,329 +496,210 @@ async function readCampaigns(
     const ref = db.collection('campaigns').doc(campaignId);
     const snapshot = await transaction.get(ref);
 
-    if (!snapshot.exists) {
-      continue;
+    if (snapshot.exists) {
+      campaigns.set(campaignId, {
+        id: snapshot.id,
+        ...(snapshot.data() as Omit<StoredCampaign, 'id'>),
+      });
     }
-
-    const data = snapshot.data() as StoredCampaign;
-
-    campaigns.set(campaignId, {
-      name: sanitizeString(data.name),
-      badge: sanitizeString(data.badge),
-      discountType: data.discountType === 'fixed' ? 'fixed' : 'percentage',
-      discountValue: typeof data.discountValue === 'number' ? data.discountValue : 0,
-      active: data.active !== false,
-      startsAt: toDate(data.startsAt),
-      endsAt: toDate(data.endsAt),
-    });
   }
 
   return campaigns;
 }
 
-function groupRequestedItems(items: OrderRequestItem[]): Map<string, number> {
-  return items.reduce((accumulator, item) => {
-    accumulator.set(item.productId, (accumulator.get(item.productId) ?? 0) + item.quantity);
-    return accumulator;
-  }, new Map<string, number>());
-}
+async function readSettings(transaction: Transaction): Promise<{ shippingPrice: number }> {
+  const settingsRef = db.collection('shopSettings').doc('default');
+  const snapshot = await transaction.get(settingsRef);
 
-function groupOrderItems(items: OrderItem[]): Map<string, number> {
-  return items.reduce((accumulator, item) => {
-    accumulator.set(item.productId, (accumulator.get(item.productId) ?? 0) + item.quantity);
-    return accumulator;
-  }, new Map<string, number>());
-}
+  if (!snapshot.exists) {
+    return { shippingPrice: DEFAULT_SHIPPING_PRICE };
+  }
 
-function createCustomerProfileFromOrder(order: CheckoutOrder): CustomerProfile {
-  const countsForStats = order.status !== 'cancelled';
+  const data = snapshot.data() as StoredShopSettings;
 
   return {
-    id: order.userId,
-    userId: order.userId,
-    name: order.customer.name,
-    email: order.customer.email,
-    phone: order.customer.phone,
-    deliveryMethodPreference: order.customer.deliveryMethod,
-    addressLine1: order.customer.addressLine1,
-    postalCode: order.customer.postalCode,
-    city: order.customer.city,
-    province: order.customer.province,
-    notes: order.customer.notes,
-    totalOrders: countsForStats ? 1 : 0,
-    totalSpent: countsForStats ? normalizeMoney(order.total) : 0,
-    lastOrderId: order.id,
-    lastOrderStatus: order.status,
-    lastOrderAt: order.createdAt,
-    createdAt: order.createdAt,
-    updatedAt: order.updatedAt,
+    shippingPrice:
+      typeof data.shippingPrice === 'number' && Number.isFinite(data.shippingPrice)
+        ? Math.max(0, data.shippingPrice)
+        : DEFAULT_SHIPPING_PRICE,
   };
 }
 
-function mergeOrderIntoCustomerProfile(existingCustomer: CustomerProfile | null, order: CheckoutOrder): CustomerProfile {
-  if (!existingCustomer) {
-    return createCustomerProfileFromOrder(order);
-  }
-
-  const countsForStats = order.status !== 'cancelled';
-  const isLatestOrder =
-    !existingCustomer.lastOrderAt || order.createdAt.getTime() >= existingCustomer.lastOrderAt.getTime();
-
-  return {
-    ...existingCustomer,
-    name: order.customer.name,
-    email: order.customer.email,
-    phone: order.customer.phone,
-    deliveryMethodPreference: order.customer.deliveryMethod,
-    addressLine1: order.customer.addressLine1,
-    postalCode: order.customer.postalCode,
-    city: order.customer.city,
-    province: order.customer.province,
-    notes: order.customer.notes,
-    totalOrders: existingCustomer.totalOrders + (countsForStats ? 1 : 0),
-    totalSpent: normalizeMoney(existingCustomer.totalSpent + (countsForStats ? order.total : 0)),
-    lastOrderId: isLatestOrder ? order.id : existingCustomer.lastOrderId,
-    lastOrderStatus: isLatestOrder ? order.status : existingCustomer.lastOrderStatus,
-    lastOrderAt: isLatestOrder ? order.createdAt : existingCustomer.lastOrderAt,
-    createdAt:
-      order.createdAt.getTime() < existingCustomer.createdAt.getTime()
-        ? order.createdAt
-        : existingCustomer.createdAt,
-    updatedAt:
-      order.updatedAt.getTime() > existingCustomer.updatedAt.getTime()
-        ? order.updatedAt
-        : existingCustomer.updatedAt,
-  };
-}
-
-function applyOrderStatusToCustomerProfile(
-  existingCustomer: CustomerProfile,
-  currentOrder: CheckoutOrder,
-  nextOrder: CheckoutOrder,
-): CustomerProfile {
-  const shouldSubtractOrder = currentOrder.status !== 'cancelled' && nextOrder.status === 'cancelled';
-  const shouldAddOrder = currentOrder.status === 'cancelled' && nextOrder.status !== 'cancelled';
-  const isTrackedAsLatestOrder = existingCustomer.lastOrderId === currentOrder.id;
-
-  return {
-    ...existingCustomer,
-    totalOrders: Math.max(
-      0,
-      existingCustomer.totalOrders + (shouldAddOrder ? 1 : 0) - (shouldSubtractOrder ? 1 : 0),
-    ),
-    totalSpent: Math.max(
-      0,
-      normalizeMoney(
-        existingCustomer.totalSpent +
-          (shouldAddOrder ? currentOrder.total : 0) -
-          (shouldSubtractOrder ? currentOrder.total : 0),
-      ),
-    ),
-    lastOrderStatus: isTrackedAsLatestOrder ? nextOrder.status : existingCustomer.lastOrderStatus,
-    lastOrderAt: isTrackedAsLatestOrder ? nextOrder.createdAt : existingCustomer.lastOrderAt,
-    updatedAt: nextOrder.updatedAt,
-  };
-}
-
-function normalizeProductStatus(status: ProductStatus | undefined, stock: number): ProductStatus {
-  if (status === 'hidden') {
-    return 'hidden';
-  }
-
-  if (stock <= 0) {
-    return 'sold_out';
-  }
-
-  return 'active';
-}
-
-function isProductVisible(status: ProductStatus): boolean {
-  return status !== 'hidden';
-}
-
-function resolveProductPrice(product: StoredProduct, campaigns: Map<string, CampaignPricing>): number {
-  const originalPrice = normalizeMoney(typeof product.originalPrice === 'number' ? product.originalPrice : 0);
-  const pricingMode = normalizePricingMode(product);
+function resolveProductPrice(
+  product: StoredProduct,
+  campaigns: Map<string, StoredCampaign>,
+): {
+  effectivePrice: number;
+  campaignId: string | null;
+  campaignName: string | null;
+} {
+  const basePrice = normalizeMoney(typeof product.originalPrice === 'number' ? product.originalPrice : 0);
 
   if (
-    pricingMode === 'individual_offer' &&
+    product.pricingMode === 'individual_offer' &&
     typeof product.offerPrice === 'number' &&
     product.offerPrice > 0 &&
-    product.offerPrice < originalPrice
+    product.offerPrice < basePrice
   ) {
-    return normalizeMoney(product.offerPrice);
+    return {
+      effectivePrice: normalizeMoney(product.offerPrice),
+      campaignId: null,
+      campaignName: null,
+    };
   }
 
-  if (pricingMode === 'campaign') {
-    const appliedCampaign = resolveAppliedCampaignPricing(product, campaigns);
+  if (product.pricingMode === 'campaign') {
+    const selectedCampaign = normalizeProductCampaignIds(product)
+      .map((campaignId) => campaigns.get(campaignId) ?? null)
+      .filter((campaign): campaign is StoredCampaign => !!campaign)
+      .filter((campaign) => isCampaignActive(campaign))
+      .map((campaign) => ({
+        campaign,
+        price: calculateCampaignPrice(basePrice, campaign),
+      }))
+      .filter((entry) => entry.price < basePrice)
+      .sort((left, right) => left.price - right.price)[0];
 
-    if (appliedCampaign) {
-      return appliedCampaign.effectivePrice;
+    if (selectedCampaign) {
+      return {
+        effectivePrice: selectedCampaign.price,
+        campaignId: selectedCampaign.campaign.id,
+        campaignName: selectedCampaign.campaign.name,
+      };
     }
   }
 
-  return originalPrice;
+  return {
+    effectivePrice: basePrice,
+    campaignId: null,
+    campaignName: null,
+  };
 }
 
-function resolveAppliedCampaignPricing(
-  product: StoredProduct,
-  campaigns: Map<string, CampaignPricing>,
-): AppliedCampaignPricing | null {
-  const originalPrice = normalizeMoney(typeof product.originalPrice === 'number' ? product.originalPrice : 0);
-
-  if (normalizePricingMode(product) !== 'campaign') {
-    return null;
-  }
-
-  const appliedCampaign = normalizeProductCampaignIds(product)
-    .map((campaignId) => {
-      const campaign = campaigns.get(campaignId);
-
-      if (!campaign || !isCampaignActive(campaign)) {
-        return null;
-      }
-
-      const effectivePrice = campaign.discountType === 'fixed'
-        ? normalizeMoney(Math.max(0, originalPrice - campaign.discountValue))
-        : normalizeMoney(originalPrice * (1 - campaign.discountValue / 100));
-
-      if (effectivePrice >= originalPrice) {
-        return null;
-      }
-
-      return {
-        id: campaignId,
-        name: campaign.name || null,
-        effectivePrice,
-      };
-    })
-    .filter((entry): entry is AppliedCampaignPricing => !!entry)
-    .sort((left, right) => left.effectivePrice - right.effectivePrice)[0];
-
-  return appliedCampaign ?? null;
-}
-
-function normalizePricingMode(product: StoredProduct): ProductPricingMode {
-  if (product.pricingMode) {
-    return product.pricingMode;
-  }
-
-  if (normalizeProductCampaignIds(product).length > 0) {
-    return 'campaign';
-  }
-
-  if (typeof product.offerPrice === 'number' && product.offerPrice > 0) {
-    return 'individual_offer';
-  }
-
-  return 'regular';
-}
-
-function normalizeProductCampaignIds(product: Partial<StoredProduct>): string[] {
-  const explicitCampaignIds = Array.isArray(product.campaignIds)
-    ? product.campaignIds.filter((campaignId): campaignId is string => typeof campaignId === 'string')
-    : [];
-  const legacyCampaignId = typeof product.campaignId === 'string' ? product.campaignId.trim() : '';
-
-  return Array.from(new Set([...explicitCampaignIds, legacyCampaignId].map((campaignId) => campaignId.trim()).filter(Boolean)));
-}
-
-function isCampaignActive(campaign: CampaignPricing, now = new Date()): boolean {
+function isCampaignActive(campaign: StoredCampaign, now = new Date()): boolean {
   if (!campaign.active) {
     return false;
   }
 
-  if (campaign.startsAt && campaign.startsAt.getTime() > now.getTime()) {
+  const startsAt = normalizeNullableDate(campaign.startsAt);
+  const endsAt = normalizeNullableDate(campaign.endsAt);
+
+  if (startsAt && startsAt.getTime() > now.getTime()) {
     return false;
   }
 
-  if (campaign.endsAt && campaign.endsAt.getTime() < now.getTime()) {
+  if (endsAt && endsAt.getTime() < now.getTime()) {
     return false;
   }
 
   return true;
 }
 
-function calculateShipping(subtotal: number): number {
-  return subtotal > 0 && subtotal < FREE_SHIPPING_THRESHOLD ? SHIPPING_PRICE : 0;
+function calculateCampaignPrice(basePrice: number, campaign: StoredCampaign): number {
+  if (campaign.discountType === 'fixed') {
+    return normalizeMoney(Math.max(0, basePrice - campaign.discountValue));
+  }
+
+  return normalizeMoney(basePrice * (1 - campaign.discountValue / 100));
 }
 
-function normalizeMoney(value: number): number {
-  return Math.round(value * 100) / 100;
-}
+async function resolveDiscountCode(
+  transaction: Transaction,
+  code: string,
+  items: OrderItem[],
+): Promise<AppliedDiscountCode> {
+  throwIfInvalidCodeInput(code);
+  const codeRef = db.collection('discountCodes').doc(`discount-${code.toLowerCase()}`);
+  const snapshot = await transaction.get(codeRef);
 
-function shouldReleaseInventory(currentStatus: OrderStatus, nextStatus: OrderStatus): boolean {
-  return currentStatus !== 'cancelled' && nextStatus === 'cancelled';
-}
+  if (!snapshot.exists) {
+    throw new HttpsError('invalid-argument', 'Ese código no existe o ya no está disponible.');
+  }
 
-function shouldReserveInventory(currentStatus: OrderStatus, nextStatus: OrderStatus): boolean {
-  return currentStatus === 'cancelled' && nextStatus !== 'cancelled';
-}
+  const discountCode = {
+    id: snapshot.id,
+    ...(snapshot.data() as Omit<StoredDiscountCode, 'id'>),
+  } as StoredDiscountCode;
 
-function reviveOrder(id: string, data: Partial<CheckoutOrder>): CheckoutOrder {
+  if (!isDiscountCodeActive(discountCode)) {
+    throw new HttpsError('invalid-argument', 'Ese código ya no está activo.');
+  }
+
+  const eligibleItems = discountCode.scope === 'all'
+    ? items
+    : items.filter((item) => discountCode.productIds.includes(item.productId));
+  const eligibleSubtotal = eligibleItems.reduce((total, item) => total + item.lineTotal, 0);
+
+  if (eligibleSubtotal <= 0) {
+    throw new HttpsError('invalid-argument', 'Ese código no aplica a los productos de este pedido.');
+  }
+
+  const rawAmount = discountCode.type === 'fixed'
+    ? discountCode.value
+    : eligibleSubtotal * (discountCode.value / 100);
+
   return {
-    id,
-    userId: sanitizeString(data.userId),
-    customer: normalizeCustomer(data.customer),
+    code: discountCode.code,
+    description: discountCode.description,
+    amount: normalizeMoney(Math.min(eligibleSubtotal, rawAmount)),
+  };
+}
+
+function throwIfInvalidCodeInput(code: string): void {
+  if (!code.trim()) {
+    throw new HttpsError('invalid-argument', 'El código de descuento está vacío.');
+  }
+}
+
+function isDiscountCodeActive(discountCode: StoredDiscountCode, now = new Date()): boolean {
+  if (!discountCode.active) {
+    return false;
+  }
+
+  const startsAt = normalizeNullableDate(discountCode.startsAt);
+  const endsAt = normalizeNullableDate(discountCode.endsAt);
+
+  if (startsAt && startsAt.getTime() > now.getTime()) {
+    return false;
+  }
+
+  if (endsAt && endsAt.getTime() < now.getTime()) {
+    return false;
+  }
+
+  return true;
+}
+
+function reviveOrder(orderId: string, data: Partial<CheckoutOrder>): CheckoutOrder {
+  const createdAt = normalizeUnknownDate(data.createdAt);
+
+  return {
+    id: orderId,
+    customer: {
+      name: sanitizeString(data.customer?.name),
+      email: sanitizeString(data.customer?.email),
+      phone: sanitizeString(data.customer?.phone),
+      dni: sanitizeString(data.customer?.dni),
+      deliveryMethod: 'shipping',
+      addressLine1: sanitizeString(data.customer?.addressLine1),
+      postalCode: sanitizeString(data.customer?.postalCode),
+      city: sanitizeString(data.customer?.city),
+      province: sanitizeString(data.customer?.province),
+      comments: data.customer?.comments ?? null,
+    },
     items: Array.isArray(data.items) ? data.items : [],
     subtotal: typeof data.subtotal === 'number' ? data.subtotal : 0,
+    discount: data.discount ?? null,
     shipping: typeof data.shipping === 'number' ? data.shipping : 0,
     total: typeof data.total === 'number' ? data.total : 0,
-    channel: 'whatsapp',
-    status: normalizeStoredOrderStatus(data.status),
-    createdAt: toDate(data.createdAt) ?? new Date(),
-    updatedAt: toDate(data.updatedAt) ?? toDate(data.createdAt) ?? new Date(),
+    paymentMethod: 'bizum',
+    status: normalizeTargetStatus(data.status),
+    createdAt,
+    updatedAt: normalizeUnknownDate(data.updatedAt) ?? createdAt,
   };
 }
 
-function normalizeStoredOrderStatus(status: unknown): OrderStatus {
-  switch (status) {
-    case 'confirmed':
-    case 'prepared':
-    case 'completed':
-    case 'cancelled':
-    case 'new':
-      return status;
-    case 'sent':
-      return 'completed';
-    case 'draft':
-    default:
-      return 'new';
-  }
-}
-
-function reviveCustomerProfile(id: string, data: Partial<CustomerProfile>): CustomerProfile {
-  return {
-    id,
-    userId: sanitizeString(data.userId) || id,
-    name: sanitizeString(data.name),
-    email: sanitizeString(data.email),
-    phone: sanitizeString(data.phone) || null,
-    deliveryMethodPreference: data.deliveryMethodPreference === 'pickup'
-      ? 'pickup'
-      : data.deliveryMethodPreference === 'shipping'
-        ? 'shipping'
-        : null,
-    addressLine1: sanitizeString(data.addressLine1) || null,
-    postalCode: sanitizeString(data.postalCode),
-    city: sanitizeString(data.city),
-    province: sanitizeString(data.province),
-    notes: sanitizeString(data.notes) || null,
-    totalOrders: typeof data.totalOrders === 'number' ? data.totalOrders : 0,
-    totalSpent: typeof data.totalSpent === 'number' ? normalizeMoney(data.totalSpent) : 0,
-    lastOrderId: sanitizeString(data.lastOrderId) || null,
-    lastOrderStatus: data.lastOrderStatus ? normalizeStoredOrderStatus(data.lastOrderStatus) : null,
-    lastOrderAt: toDate(data.lastOrderAt) ?? null,
-    createdAt: toDate(data.createdAt) ?? new Date(),
-    updatedAt: toDate(data.updatedAt) ?? toDate(data.createdAt) ?? new Date(),
-  };
-}
-
-function toDate(value: unknown): Date | null {
-  if (!value) {
-    return null;
-  }
-
+function normalizeUnknownDate(value: unknown): Date {
   if (value instanceof Date) {
     return value;
   }
@@ -950,7 +712,46 @@ function toDate(value: unknown): Date | null {
     return new Date(value);
   }
 
-  return null;
+  return new Date();
+}
+
+async function applyInventoryAdjustment(
+  transaction: Transaction,
+  groupedQuantities: Map<string, number>,
+  operation: 'reserve' | 'release',
+): Promise<void> {
+  for (const [productId, quantity] of groupedQuantities.entries()) {
+    const ref = db.collection('products').doc(productId);
+    const snapshot = await transaction.get(ref);
+
+    if (!snapshot.exists) {
+      if (operation === 'reserve') {
+        throw new HttpsError('not-found', `La pieza "${productId}" ya no está disponible.`);
+      }
+      continue;
+    }
+
+    const product = snapshot.data() as StoredProduct;
+    const currentStock = typeof product.stock === 'number' ? product.stock : 0;
+    const nextStock = operation === 'reserve' ? currentStock - quantity : currentStock + quantity;
+
+    if (operation === 'reserve' && nextStock < 0) {
+      throw new HttpsError('failed-precondition', `No queda stock suficiente de la pieza "${product.name ?? productId}".`);
+    }
+
+    transaction.update(ref, {
+      stock: nextStock,
+      status: normalizeProductStatus(product.status, nextStock),
+    });
+  }
+}
+
+function shouldReleaseInventory(currentStatus: OrderStatus, nextStatus: OrderStatus): boolean {
+  return currentStatus !== 'cancelled' && nextStatus === 'cancelled';
+}
+
+function shouldReserveInventory(currentStatus: OrderStatus, nextStatus: OrderStatus): boolean {
+  return currentStatus === 'cancelled' && nextStatus !== 'cancelled';
 }
 
 function serializeOrder(order: CheckoutOrder): SerializedCheckoutOrder {
@@ -960,187 +761,3 @@ function serializeOrder(order: CheckoutOrder): SerializedCheckoutOrder {
     updatedAt: order.updatedAt.toISOString(),
   };
 }
-
-const DEMO_CAMPAIGNS = [
-  {
-    id: 'cmp-verano-2026',
-    name: 'Campana Verano 2026',
-    badge: 'Verano',
-    description: 'Seleccion de temporada con descuento suave para piezas ligeras y de viaje.',
-    discountType: 'percentage' as const,
-    discountValue: 15,
-    active: true,
-    startsAt: new Date('2026-06-01'),
-    endsAt: new Date('2026-08-31'),
-  },
-  {
-    id: 'cmp-vuelta-taller-2026',
-    name: 'Vuelta al Taller',
-    badge: 'Septiembre',
-    description: 'Campana preparada para la siguiente temporada.',
-    discountType: 'fixed' as const,
-    discountValue: 6,
-    active: false,
-    startsAt: new Date('2026-09-01'),
-    endsAt: new Date('2026-09-30'),
-  },
-];
-
-const DEMO_PRODUCTS = [
-  {
-    id: 'prd-bolso-alba',
-    name: 'Bolso Alba',
-    slug: 'bolso-alba',
-    description: 'Bolso de mano en tejido jacquard floral con asa corta y cierre interior.',
-    story: 'Una pieza tranquila para planes de tarde, hecha en series pequenas con tejidos seleccionados.',
-    originalPrice: 58,
-    offerPrice: null,
-    imageUrl: 'https://images.unsplash.com/photo-1590874103328-eac38a683ce7?auto=format&fit=crop&w=900&q=80',
-    gallery: [
-      'https://images.unsplash.com/photo-1590874103328-eac38a683ce7?auto=format&fit=crop&w=900&q=80',
-      'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?auto=format&fit=crop&w=900&q=80',
-    ],
-    category: 'Bolsos',
-    categorySlug: 'bolsos',
-    collection: 'Invitada',
-    collectionSlug: 'invitada',
-    stock: 4,
-    sizes: ['Unica'],
-    colors: ['Arena', 'Flor cereza'],
-    pricingMode: 'regular' as const,
-    campaignIds: [],
-    featured: true,
-    status: 'active' as const,
-    createdAt: new Date('2026-06-01'),
-  },
-  {
-    id: 'prd-neceser-lia',
-    name: 'Neceser Lia',
-    slug: 'neceser-lia',
-    description: 'Neceser acolchado con forro lavable, pensado para bolso diario o viaje.',
-    story: 'Compacto por fuera, generoso por dentro. El tipo de pieza que termina yendo a todas partes.',
-    originalPrice: 32,
-    offerPrice: null,
-    imageUrl: 'https://images.unsplash.com/photo-1584917865442-de89df76afd3?auto=format&fit=crop&w=900&q=80',
-    gallery: [
-      'https://images.unsplash.com/photo-1584917865442-de89df76afd3?auto=format&fit=crop&w=900&q=80',
-      'https://images.unsplash.com/photo-1605733160314-4fc7dac4bb16?auto=format&fit=crop&w=900&q=80',
-    ],
-    category: 'Neceseres',
-    categorySlug: 'neceseres',
-    collection: 'Verano',
-    collectionSlug: 'verano',
-    stock: 8,
-    sizes: ['S', 'M'],
-    colors: ['Verde salvia', 'Crudo'],
-    pricingMode: 'campaign' as const,
-    campaignIds: ['cmp-verano-2026'],
-    featured: true,
-    status: 'active' as const,
-    createdAt: new Date('2026-06-03'),
-  },
-  {
-    id: 'prd-tote-maia',
-    name: 'Tote Maia',
-    slug: 'tote-maia',
-    description: 'Bolso tote amplio con asas resistentes, bolsillo interior y patron reversible.',
-    story: 'Creado para acompanar compras, trabajo y escapadas cortas sin perder el punto artesanal.',
-    originalPrice: 64,
-    offerPrice: null,
-    imageUrl: 'https://images.unsplash.com/photo-1605733160314-4fc7dac4bb16?auto=format&fit=crop&w=900&q=80',
-    gallery: [
-      'https://images.unsplash.com/photo-1605733160314-4fc7dac4bb16?auto=format&fit=crop&w=900&q=80',
-      'https://images.unsplash.com/photo-1584917865442-de89df76afd3?auto=format&fit=crop&w=900&q=80',
-    ],
-    category: 'Bolsos',
-    categorySlug: 'bolsos',
-    collection: 'Diario',
-    collectionSlug: 'diario',
-    stock: 3,
-    sizes: ['Unica'],
-    colors: ['Azul tinta', 'Rayas'],
-    pricingMode: 'regular' as const,
-    campaignIds: [],
-    featured: true,
-    status: 'active' as const,
-    createdAt: new Date('2026-06-06'),
-  },
-  {
-    id: 'prd-funda-nora',
-    name: 'Funda Nora',
-    slug: 'funda-nora',
-    description: 'Funda acolchada para tablet o libro electronico con cierre suave.',
-    story: 'Proteccion bonita para objetos cotidianos, con costuras reforzadas y tacto mullido.',
-    originalPrice: 36,
-    offerPrice: null,
-    imageUrl: 'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?auto=format&fit=crop&w=900&q=80',
-    gallery: [
-      'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?auto=format&fit=crop&w=900&q=80',
-      'https://images.unsplash.com/photo-1590874103328-eac38a683ce7?auto=format&fit=crop&w=900&q=80',
-    ],
-    category: 'Fundas',
-    categorySlug: 'fundas',
-    collection: 'Organizacion',
-    collectionSlug: 'organizacion',
-    stock: 6,
-    sizes: ['Tablet', 'E-reader'],
-    colors: ['Malva', 'Natural'],
-    pricingMode: 'regular' as const,
-    campaignIds: [],
-    featured: false,
-    status: 'active' as const,
-    createdAt: new Date('2026-06-08'),
-  },
-  {
-    id: 'prd-cuelgamovil-iris',
-    name: 'Cuelgamovil Iris',
-    slug: 'cuelgamovil-iris',
-    description: 'Correa de movil con tejido estampado, mosquetones metalicos y largo ajustable.',
-    story: 'Un accesorio ligero para llevar el movil a mano sin renunciar a un acabado especial.',
-    originalPrice: 24,
-    offerPrice: 19,
-    imageUrl: 'https://images.unsplash.com/photo-1600721391776-b5cd0e0048f9?auto=format&fit=crop&w=900&q=80',
-    gallery: [
-      'https://images.unsplash.com/photo-1600721391776-b5cd0e0048f9?auto=format&fit=crop&w=900&q=80',
-      'https://images.unsplash.com/photo-1590874103328-eac38a683ce7?auto=format&fit=crop&w=900&q=80',
-    ],
-    category: 'Accesorios',
-    categorySlug: 'accesorios',
-    collection: 'Verano',
-    collectionSlug: 'verano',
-    stock: 12,
-    sizes: ['Ajustable'],
-    colors: ['Mostaza', 'Negro'],
-    pricingMode: 'individual_offer' as const,
-    campaignIds: [],
-    featured: false,
-    status: 'active' as const,
-    createdAt: new Date('2026-06-10'),
-  },
-  {
-    id: 'prd-bolso-cala',
-    name: 'Bolso Cala',
-    slug: 'bolso-cala',
-    description: 'Bolso pequeno cruzado con solapa, ideal para eventos y salidas ligeras.',
-    story: 'Una silueta compacta con presencia, terminada a mano para que cada pieza sea ligeramente unica.',
-    originalPrice: 49,
-    offerPrice: null,
-    imageUrl: 'https://images.unsplash.com/photo-1575032617751-6ddec2089882?auto=format&fit=crop&w=900&q=80',
-    gallery: [
-      'https://images.unsplash.com/photo-1575032617751-6ddec2089882?auto=format&fit=crop&w=900&q=80',
-      'https://images.unsplash.com/photo-1584917865442-de89df76afd3?auto=format&fit=crop&w=900&q=80',
-    ],
-    category: 'Bolsos',
-    categorySlug: 'bolsos',
-    collection: 'Invitada',
-    collectionSlug: 'invitada',
-    stock: 5,
-    sizes: ['Unica'],
-    colors: ['Negro', 'Terracota'],
-    pricingMode: 'regular' as const,
-    campaignIds: [],
-    featured: false,
-    status: 'active' as const,
-    createdAt: new Date('2026-06-12'),
-  },
-];

@@ -1,0 +1,47 @@
+<section class="contact-shell">
+  <div class="section-heading">
+    <p class="eyebrow">Consultas</p>
+    <h1>Cuéntame qué necesitas</h1>
+    <p>
+      Si quieres resolver una duda, consultar un encargo o preguntar por una personalización,
+      puedes dejar el mensaje aquí.
+    </p>
+  </div>
+
+  <div class="contact-layout">
+    <form class="contact-form" [formGroup]="contactForm" (ngSubmit)="submit()">
+      <label>
+        Nombre
+        <input type="text" formControlName="name" autocomplete="name" />
+      </label>
+
+      <label>
+        Email
+        <input type="email" formControlName="email" autocomplete="email" />
+      </label>
+
+      <label class="wide">
+        Consulta
+        <textarea rows="7" formControlName="body"></textarea>
+      </label>
+
+      <button type="submit" class="button primary" [disabled]="isSubmitting()">
+        {{ isSubmitting() ? 'Enviando...' : 'Enviar consulta' }}
+      </button>
+    </form>
+
+    <aside class="contact-card">
+      <h2>Canales de atención</h2>
+      <p>De momento este formulario deja la consulta registrada dentro de la tienda.</p>
+      <div>
+        <span>Correo previsto</span>
+        <strong>{{ shopSettingsService.settingsSnapshot.contactEmail }}</strong>
+      </div>
+      <div>
+        <span>Pago activo</span>
+        <strong>Bizum</strong>
+      </div>
+      <a class="button ghost" routerLink="/">Volver a la tienda</a>
+    </aside>
+  </div>
+</section>

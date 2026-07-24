@@ -53,6 +53,8 @@ export function reviveProduct(product: WithUnknownProductDate): Product {
     ...product,
     imageUrl,
     gallery: gallery.length > 0 ? gallery : imageUrl ? [imageUrl] : [],
+    subcategory: product.subcategory ?? null,
+    subcategorySlug: product.subcategorySlug ?? null,
     collection: product.collection ?? null,
     collectionSlug: product.collectionSlug ?? null,
     campaignIds,
@@ -70,18 +72,21 @@ export function reviveProduct(product: WithUnknownProductDate): Product {
 
 export function reviveOrder(order: WithUnknownOrderDates): CheckoutOrder {
   const createdAt = normalizeDate(order.createdAt);
+  const legacyCustomer = order.customer as typeof order.customer & { notes?: string | null };
 
   return {
     ...order,
     customer: {
-      ...order.customer,
-      deliveryMethod: order.customer.deliveryMethod === 'pickup' ? 'pickup' : 'shipping',
-      addressLine1: order.customer.addressLine1 ?? null,
+      ...legacyCustomer,
+      deliveryMethod: 'shipping',
+      dni: order.customer.dni ?? '',
+      addressLine1: order.customer.addressLine1 ?? '',
       postalCode: order.customer.postalCode ?? '',
       city: order.customer.city ?? '',
       province: order.customer.province ?? '',
-      notes: order.customer.notes ?? null,
+      comments: order.customer.comments ?? legacyCustomer.notes ?? null,
     },
+    discount: order.discount ?? null,
     status: normalizeOrderStatus(order.status),
     createdAt,
     updatedAt: normalizeNullableDate(order.updatedAt) ?? createdAt,
@@ -102,11 +107,7 @@ export function reviveCustomerProfile(customer: WithUnknownCustomerDates): Custo
   return {
     ...customer,
     phone: customer.phone ?? null,
-    deliveryMethodPreference: customer.deliveryMethodPreference === 'pickup'
-      ? 'pickup'
-      : customer.deliveryMethodPreference === 'shipping'
-        ? 'shipping'
-        : null,
+    deliveryMethodPreference: customer.deliveryMethodPreference === 'shipping' ? 'shipping' : null,
     addressLine1: customer.addressLine1 ?? null,
     postalCode: customer.postalCode ?? '',
     city: customer.city ?? '',

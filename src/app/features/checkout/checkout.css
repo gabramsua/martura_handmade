@@ -1,236 +1,218 @@
 .checkout-shell {
-  padding: clamp(36px, 6vw, 78px) clamp(18px, 5vw, 64px);
-}
-
-mat-progress-bar {
-  margin-top: 18px;
-}
-
-.checkout-layout {
-  align-items: start;
   display: grid;
-  gap: 24px;
-  grid-template-columns: minmax(0, 1fr) 360px;
-  margin-top: 28px;
+  gap: 28px;
+  padding: 32px 24px 56px;
 }
 
-.checkout-form,
-.order-preview,
-.empty-checkout {
-  background: #fff;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 22px;
-}
-
-.checkout-form {
+.section-heading {
   display: grid;
-  gap: 16px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  max-width: 760px;
 }
 
-.checkout-form label {
-  color: var(--muted);
-  display: grid;
-  font-weight: 800;
-  gap: 8px;
-}
-
-.checkout-form .wide {
-  grid-column: 1 / -1;
-}
-
-.checkout-form input,
-.checkout-form select,
-.checkout-form textarea {
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  color: var(--ink);
-  min-height: 44px;
-  padding: 10px 12px;
-  resize: vertical;
-}
-
-.checkout-form button {
-  align-items: center;
-  display: inline-flex;
-  gap: 8px;
-  justify-content: center;
-  grid-column: 1 / -1;
-  width: fit-content;
-}
-
-.form-section {
-  border-top: 1px solid var(--line);
-  padding-top: 14px;
-}
-
-.section-kicker {
-  color: var(--rose-dark);
+.eyebrow {
+  color: #8c7d72;
   font-size: 0.82rem;
-  font-weight: 900;
-  letter-spacing: 0;
   margin: 0;
   text-transform: uppercase;
 }
 
-.delivery-help {
-  background: var(--paper);
-  border-radius: 6px;
-  color: var(--muted);
-  font-weight: 700;
-  margin: -4px 0 0;
+.section-heading h1,
+.section-heading p,
+.order-preview h2,
+.order-confirmation h2,
+.confirmation-meta strong {
+  margin: 0;
+}
+
+.checkout-layout {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.8fr);
+}
+
+.checkout-form,
+.order-preview,
+.order-confirmation,
+.confirmation-card {
+  background: #fffdf8;
+  border: 1px solid #e7ddd0;
+  border-radius: 8px;
+}
+
+.checkout-form {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 22px;
+}
+
+.wide {
+  grid-column: 1 / -1;
+}
+
+label {
+  display: grid;
+  gap: 8px;
+}
+
+input,
+textarea,
+button {
+  font: inherit;
+}
+
+input,
+textarea {
+  border: 1px solid #d9ccbd;
+  border-radius: 8px;
+  min-height: 44px;
   padding: 10px 12px;
+  width: 100%;
+}
+
+textarea {
+  min-height: 120px;
+  resize: vertical;
 }
 
 .checkbox-row {
   align-items: center;
-  display: flex !important;
-  flex-direction: row;
+  display: flex;
   gap: 10px;
 }
 
 .checkbox-row input {
-  min-height: 0;
+  min-height: 18px;
+  width: auto;
 }
 
-.form-error {
-  background: #f8e6e1;
-  border-radius: 6px;
-  color: #8a3f32;
-  font-weight: 700;
-  grid-column: 1 / -1;
+.form-error,
+.preview-note {
+  color: #8f4a3a;
   margin: 0;
-  padding: 10px 12px;
-}
-
-.order-preview h2,
-.empty-checkout h2 {
-  font-family: Georgia, "Times New Roman", serif;
-  font-weight: 500;
-  margin-top: 0;
-}
-
-.preview-item,
-.preview-block,
-.preview-total {
-  display: flex;
-  gap: 16px;
-  justify-content: space-between;
-  padding: 12px 0;
-}
-
-.preview-item,
-.preview-block {
-  border-bottom: 1px solid var(--line);
-}
-
-.preview-total {
-  font-size: 1.2rem;
-  font-weight: 900;
 }
 
 .saved-order {
-  background: #edf7f1;
-  border-radius: 6px;
-  color: #1f6b4b;
-  font-weight: 800;
-  line-height: 1.4;
-  margin: 12px 0 0;
-  padding: 10px 12px;
+  color: #4c6f56;
+  margin: 0;
 }
 
-.whatsapp {
-  background: #1f7a54;
-  color: #fff;
-  margin-top: 14px;
-  width: 100%;
-}
-
-.order-confirmation,
-.confirmation-card {
+.button {
+  align-items: center;
   background: #fff;
-  border: 1px solid var(--line);
+  border: 1px solid #d9ccbd;
   border-radius: 8px;
+  color: #2c241f;
+  display: inline-flex;
+  justify-content: center;
+  min-height: 42px;
+  padding: 0 16px;
+  text-decoration: none;
 }
 
+.button.primary {
+  background: #2c241f;
+  border-color: #2c241f;
+  color: #fff;
+}
+
+.button.ghost {
+  background: #fff;
+}
+
+.order-preview,
 .order-confirmation {
   display: grid;
-  gap: 18px;
-  padding: 24px;
+  gap: 16px;
+  padding: 22px;
 }
 
-.order-confirmation h2 {
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: clamp(2rem, 4vw, 3rem);
-  font-weight: 500;
-  margin: 0;
+.preview-item,
+.preview-total,
+.confirmation-meta,
+.confirmation-actions {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
 }
 
-.order-confirmation p:not(.eyebrow) {
-  color: var(--muted);
-  line-height: 1.6;
-  margin: 0;
+.grand-total {
+  border-top: 1px solid #e7ddd0;
+  padding-top: 12px;
+}
+
+.discount-row {
+  color: #7e4f36;
 }
 
 .confirmation-card {
   display: grid;
-  gap: 16px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   padding: 16px;
 }
 
-.confirmation-meta span,
-.confirmation-items span {
-  color: var(--muted);
-  display: block;
+.confirmation-meta {
+  align-items: flex-start;
+  flex-direction: column;
 }
 
-.confirmation-meta strong {
-  font-size: 1.1rem;
+.confirmation-meta span,
+.preview-item span {
+  color: #8c7d72;
 }
 
 .confirmation-items {
   display: grid;
-  gap: 10px;
+  gap: 12px;
 }
 
 .confirmation-items article {
   align-items: center;
-  background: #fff;
-  border: 1px solid var(--line);
-  border-radius: 8px;
   display: grid;
-  gap: 12px;
-  grid-template-columns: 72px minmax(0, 1fr) auto;
-  padding: 10px;
+  gap: 14px;
+  grid-template-columns: 64px 1fr auto;
 }
 
 .confirmation-items img {
-  aspect-ratio: 1;
-  border-radius: 6px;
+  border-radius: 8px;
+  display: block;
+  height: 64px;
   object-fit: cover;
-  width: 72px;
+  width: 64px;
 }
 
-.confirmation-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
+.discount-note {
+  margin: 0;
 }
 
-.confirmation-actions .button {
-  width: auto;
+.empty-checkout {
+  display: grid;
+  gap: 14px;
+  justify-items: start;
 }
 
-@media (max-width: 860px) {
+@media (max-width: 960px) {
   .checkout-layout,
+  .confirmation-card {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .checkout-shell {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+
   .checkout-form {
     grid-template-columns: 1fr;
   }
 
-  .confirmation-card,
-  .confirmation-items article {
-    grid-template-columns: 1fr;
+  .confirmation-actions {
+    align-items: stretch;
+    flex-direction: column;
   }
 }

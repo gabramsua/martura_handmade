@@ -1,36 +1,65 @@
-<section class="hero">
-  <div class="hero-copy">
-    <p class="eyebrow">Nueva colección artesanal</p>
-    <h1>Martura Handmade</h1>
-    <p>
-      Bolsos, neceseres y accesorios textiles hechos a mano en pequeñas series,
-      con tejidos escogidos y acabados pensados para el uso diario.
-    </p>
-    <div class="hero-actions">
-      <a class="button primary" href="#catalogo">Ver catálogo</a>
-      @if (showAdminAccess$ | async) {
-        <a class="button ghost" routerLink="/admin">Panel privado</a>
-      } @else {
-        <a class="button ghost" routerLink="/pedidos">Mis pedidos</a>
-      }
+@if (currentHeroSlide(); as heroSlide) {
+  <section class="hero" [style.background-image]="'linear-gradient(rgba(28, 24, 21, 0.28), rgba(28, 24, 21, 0.42)), url(' + heroSlide.imageUrl + ')'">
+    <div class="hero-copy">
+      <p class="eyebrow">Martura Handmade</p>
+      <h1>{{ heroSlide.headline }}</h1>
+      <p class="hero-intro">{{ heroSlide.caption }}</p>
+
+      <div class="hero-actions">
+        <a class="button primary" routerLink="/" fragment="catalogo">Ver catálogo</a>
+        <a class="button ghost" routerLink="/consultas">Hacer una consulta</a>
+      </div>
     </div>
-  </div>
+
+    @if (heroSlides(); as slides) {
+      @if (slides.length > 1) {
+        <div class="hero-controls">
+          <button type="button" class="hero-control" (click)="previousHero()">‹</button>
+          <button type="button" class="hero-control" (click)="nextHero()">›</button>
+        </div>
+      }
+    }
+  </section>
+}
+
+<section class="service-strip">
+  <article>
+    <span>Pago</span>
+    <strong>Bizum confirmado</strong>
+    <p>El checkout deja el pedido registrado y muestra al instante el número Bizum al que hacer el pago.</p>
+  </article>
+  <article>
+    <span>Encargos</span>
+    <strong>Consulta cambios y combinaciones</strong>
+    <p>El catálogo es la base, pero sigue habiendo margen para personalización y detalles a medida.</p>
+  </article>
+  <article>
+    <span>Producción</span>
+    <strong>Hecho a mano</strong>
+    <p>Cada pieza se prepara con ritmo de taller y seguimiento desde “En fábrica” hasta la entrega.</p>
+  </article>
 </section>
 
 <section class="featured-section">
   <div class="section-heading">
     <p class="eyebrow">Selección destacada</p>
-    <h2>Piezas listas para salir del taller</h2>
+    <h2>Una vista rápida de Martura</h2>
+    <p>Piezas que resumen bien el tono del catálogo actual y ayudan a entrar en materia enseguida.</p>
   </div>
 
   <div class="featured-grid">
     @for (product of featuredProducts$ | async; track product.id) {
       <article class="featured-product">
-        <img [src]="product.imageUrl" [alt]="product.name" />
+        <a [routerLink]="['/producto', product.slug]" class="featured-image">
+          <img [src]="product.imageUrl" [alt]="product.name" />
+        </a>
         <div>
           <p>{{ getTaxonomyLabel(product) }}</p>
           <h3>{{ product.name }}</h3>
-          <a [routerLink]="['/producto', product.slug]">Ver pieza</a>
+          <div class="featured-footer">
+            <strong>{{ getCurrentPrice(product) | currency: 'EUR' : 'symbol' : '1.0-0' : 'es' }}</strong>
+            <button type="button" class="text-button" (click)="shareProduct(product)">Compartir</button>
+          </div>
         </div>
       </article>
     }
@@ -41,20 +70,20 @@
   <div class="catalog-toolbar">
     <div class="catalog-heading">
       <p class="eyebrow">Catálogo</p>
-      <h2>Compra por pieza</h2>
+      <h2>Piezas disponibles</h2>
       <p class="catalog-summary">
         {{ filteredCount$ | async }} pieza(s) visibles de {{ catalogCount$ | async }}
       </p>
     </div>
 
     @if (filters$ | async; as filters) {
-      <div class="filters-panel" aria-label="Filtros de catálogo">
+      <div class="filters-panel">
         <div class="filters-grid">
           <label class="search-field">
             <span>Buscar</span>
             <input
               type="search"
-              placeholder="Buscar bolsos, fundas..."
+              placeholder="Busca bolsos, neceseres, packs..."
               [value]="filters.query"
               (input)="updateQuery($any($event.target).value)"
             />
@@ -66,6 +95,16 @@
               <option value="">Todas</option>
               @for (category of categories$ | async; track category.slug) {
                 <option [value]="category.slug">{{ category.name }}</option>
+              }
+            </select>
+          </label>
+
+          <label class="select-field">
+            <span>Subcategoría</span>
+            <select [value]="filters.subcategorySlug ?? ''" (change)="selectSubcategory($any($event.target).value || null)">
+              <option value="">Todas</option>
+              @for (subcategory of subcategories$ | async; track subcategory.slug) {
+                <option [value]="subcategory.slug">{{ subcategory.name }}</option>
               }
             </select>
           </label>
@@ -91,19 +130,13 @@
         </div>
 
         <div class="filters-meta">
-          <label class="offer-toggle">
-            <input
-              type="checkbox"
-              [checked]="filters.onlyOffers"
-              (change)="toggleOffers($any($event.target).checked)"
-            />
+          <label class="checkbox-chip">
+            <input type="checkbox" [checked]="filters.onlyOffers" (change)="toggleOffers($any($event.target).checked)" />
             Solo promociones
           </label>
 
           @if (hasActiveFilters(filters)) {
-            <button type="button" class="clear-filters" (click)="clearFilters()">
-              Limpiar filtros
-            </button>
+            <button type="button" class="clear-filters" (click)="clearFilters()">Limpiar filtros</button>
           }
         </div>
       </div>
@@ -111,8 +144,10 @@
   </div>
 
   @if (loading$ | async) {
-    <mat-progress-bar mode="indeterminate"></mat-progress-bar>
-    <p class="empty-state">Cargando catálogo...</p>
+    <div class="catalog-loading">
+      <mat-spinner diameter="32"></mat-spinner>
+      <p>Cargando catálogo...</p>
+    </div>
   } @else {
     <div class="product-grid">
       @for (product of filteredProducts$ | async; track product.id) {
@@ -123,34 +158,35 @@
               <span [class.sold-out-badge]="product.status === 'sold_out'">{{ badgeLabel }}</span>
             }
           </a>
+
           <div class="product-content">
             <p>{{ getTaxonomyLabel(product) }}</p>
             <h3>{{ product.name }}</h3>
-            <p>{{ product.description }}</p>
+            <p class="product-description">{{ product.description }}</p>
+
             @if (getCampaignSummary(product); as campaignSummary) {
               <p class="campaign-summary">{{ campaignSummary }}</p>
             }
+
             <div class="product-footer">
               <div class="price-stack">
-                <strong>
-                  {{ getCurrentPrice(product) | currency: 'EUR' : 'symbol' : '1.0-0' : 'es' }}
-                </strong>
+                <strong>{{ getCurrentPrice(product) | currency: 'EUR' : 'symbol' : '1.0-0' : 'es' }}</strong>
                 @if (getComparePrice(product); as comparePrice) {
                   <span>{{ comparePrice | currency: 'EUR' : 'symbol' : '1.0-0' : 'es' }}</span>
                 }
               </div>
-              @if (isAdmin$ | async) {
-                <a class="product-action-link" routerLink="/admin">Gestionar</a>
-              } @else {
+
+              <div class="product-actions">
+                <button type="button" class="icon-button" (click)="shareProduct(product)">Compartir</button>
                 <button type="button" [disabled]="!isAvailable(product)" (click)="addToCart(product)">
                   {{ isAvailable(product) ? 'Añadir' : 'Agotado' }}
                 </button>
-              }
+              </div>
             </div>
           </div>
         </article>
       } @empty {
-        <div class="empty-state">
+        <div class="empty-state-block">
           <p>No hay piezas con esos filtros.</p>
           <button type="button" class="button ghost" (click)="clearFilters()">Ver todo el catálogo</button>
         </div>
@@ -158,3 +194,24 @@
     </div>
   }
 </section>
+
+@if (settings$ | async; as settings) {
+  <section class="about-section" id="sobre-mi">
+    <div class="section-heading">
+      <p class="eyebrow">Sobre mí</p>
+      <h2>{{ settings.aboutTitle }}</h2>
+      <p>{{ settings.aboutBody }}</p>
+    </div>
+    <div class="about-card">
+      <div>
+        <span>Consultas</span>
+        <strong>{{ settings.contactEmail }}</strong>
+      </div>
+      <div>
+        <span>Pago activo</span>
+        <strong>Bizum al {{ settings.bizumPhone }}</strong>
+      </div>
+      <a class="button primary" routerLink="/consultas">Quiero escribirte</a>
+    </div>
+  </section>
+}

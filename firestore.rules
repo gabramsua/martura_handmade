@@ -23,25 +23,41 @@ service cloud.firestore {
     }
 
     match /productCategories/{categoryId} {
-      allow read: if isAdmin();
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /productSubcategories/{subcategoryId} {
+      allow read: if true;
       allow create, update, delete: if isAdmin();
     }
 
     match /productCollections/{collectionId} {
-      allow read: if isAdmin();
+      allow read: if true;
       allow create, update, delete: if isAdmin();
     }
 
     match /orders/{orderId} {
-      allow read: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow read: if isAdmin();
       allow create: if false;
       allow update: if false;
       allow delete: if isAdmin();
     }
 
-    match /customers/{customerId} {
-      allow read: if isAdmin() || (isSignedIn() && customerId == request.auth.uid);
+    match /discountCodes/{discountCodeId} {
+      allow read: if true;
       allow create, update, delete: if isAdmin();
+    }
+
+    match /shopSettings/{settingsId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /contactMessages/{messageId} {
+      allow create: if true;
+      allow read: if isAdmin();
+      allow update, delete: if isAdmin();
     }
   }
 }

@@ -19,11 +19,15 @@ export const authMode = !isFirebaseConfigured
 
 export const firestoreCollections = {
   campaigns: 'campaigns',
+  contactMessages: 'contactMessages',
   customers: 'customers',
+  discountCodes: 'discountCodes',
   orders: 'orders',
   productCategories: 'productCategories',
+  productSubcategories: 'productSubcategories',
   productCollections: 'productCollections',
   products: 'products',
+  shopSettings: 'shopSettings',
 } as const;
 
 export function isAdminEmail(email: string): boolean {

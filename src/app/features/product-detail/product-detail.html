@@ -1,22 +1,27 @@
 @if (product$ | async; as product) {
-<section class="detail-shell">
-  <div class="detail-gallery">
-      <img class="main-image" [src]="getMainImage(product)" [alt]="product.name" />
-      <div class="thumb-row">
-        @for (image of product.gallery; track image) {
-          <button
-            type="button"
-            class="thumb-button"
-            [class.thumb-button-active]="getMainImage(product) === image"
-            (click)="selectImage(image)">
-            <img [src]="image" [alt]="product.name" />
-          </button>
-        }
+  <section class="detail-shell">
+    <div class="detail-gallery">
+      <div class="detail-gallery-frame">
+        <img class="main-image" [src]="getMainImage(product)" [alt]="product.name" />
       </div>
+
+      @if (product.gallery.length > 1) {
+        <div class="thumb-row">
+          @for (image of product.gallery; track image) {
+            <button
+              type="button"
+              class="thumb-button"
+              [class.thumb-button-active]="getMainImage(product) === image"
+              (click)="selectImage(image)">
+              <img [src]="image" [alt]="product.name" />
+            </button>
+          }
+        </div>
+      }
     </div>
 
     <article class="detail-info">
-      <a class="back-link" routerLink="/">Volver al catálogo</a>
+      <a class="back-link" routerLink="/">Volver a la tienda</a>
       <p class="eyebrow">{{ getTaxonomyLabel(product) }}</p>
       <h1>{{ product.name }}</h1>
       <p class="status-pill" [class.sold-out]="!isAvailable(product)">{{ getStatusLabel(product) }}</p>
@@ -37,24 +42,30 @@
         </div>
       }
 
-      @if (isAdmin$ | async) {
-        <div class="variant-panel admin-panel">
-          <p>Vista interna</p>
-          <span>Este producto se está viendo como administradora.</span>
-          <a class="admin-panel-link" routerLink="/admin">Abrir en dashboard</a>
-        </div>
-      } @else {
-        <div class="variant-panel">
-          <p>Tamaño o variante</p>
+      <div class="variant-panel">
+        @if (product.sizes.length > 0) {
+          <p>Tallas disponibles</p>
           <div class="variant-list">
             @for (size of product.sizes; track size) {
               <button type="button" [disabled]="!isAvailable(product)" (click)="addToCart(product, size)">
-                {{ isAvailable(product) ? 'Añadir ' + size : 'Sin stock' }}
+                {{ isAvailable(product) ? 'Añadir · ' + size : 'Sin stock' }}
               </button>
             }
           </div>
-        </div>
-      }
+        } @else {
+          <p>Compra directa</p>
+          <div class="variant-list">
+            <button type="button" [disabled]="!isAvailable(product)" (click)="addToCart(product)">
+              {{ isAvailable(product) ? 'Añadir al carrito' : 'Sin stock' }}
+            </button>
+          </div>
+        }
+      </div>
+
+      <div class="detail-actions">
+        <button type="button" class="share-button" (click)="shareProduct(product)">Compartir</button>
+        <a class="checkout-link" routerLink="/checkout">Ir al checkout</a>
+      </div>
 
       <dl class="detail-meta">
         <div>
@@ -63,15 +74,19 @@
         </div>
         <div>
           <dt>Colores</dt>
-          <dd>{{ product.colors.join(', ') }}</dd>
+          <dd>{{ product.colors.length ? product.colors.join(', ') : 'Consultar' }}</dd>
         </div>
         <div>
           <dt>Colección</dt>
-          <dd>{{ product.collection || 'Permanente' }}</dd>
+          <dd>{{ product.collection || 'Catálogo actual' }}</dd>
+        </div>
+        <div>
+          <dt>Pago</dt>
+          <dd>Bizum al {{ shopSettingsService.settingsSnapshot.bizumPhone }}</dd>
         </div>
         <div>
           <dt>Envío</dt>
-          <dd>Gratis desde 75 EUR</dd>
+          <dd>{{ shopSettingsService.settingsSnapshot.shippingPrice | currency: 'EUR' }} por pedido</dd>
         </div>
       </dl>
     </article>

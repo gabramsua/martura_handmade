@@ -15,6 +15,8 @@ export interface Product {
   gallery: string[];
   category: string;
   categorySlug: string;
+  subcategory: string | null;
+  subcategorySlug: string | null;
   collection: string | null;
   collectionSlug: string | null;
   stock: number;
@@ -34,6 +36,7 @@ export type ProductDraft = Omit<Product, 'id' | 'slug' | 'createdAt'> & {
 
 export interface ProductFilters {
   categorySlug: string | null;
+  subcategorySlug: string | null;
   collectionSlug: string | null;
   query: string;
   onlyOffers: boolean;

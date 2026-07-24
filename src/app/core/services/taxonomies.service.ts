@@ -21,6 +21,7 @@ import { slugify } from '../utils/slug';
 import { LocalStorageService } from './local-storage.service';
 
 const CATEGORY_STORAGE_KEY = 'martura_taxonomy_categories';
+const SUBCATEGORY_STORAGE_KEY = 'martura_taxonomy_subcategories';
 const COLLECTION_STORAGE_KEY = 'martura_taxonomy_collections';
 
 @Injectable({ providedIn: 'root' })
@@ -33,13 +34,17 @@ export class TaxonomiesService {
   private readonly collectionsSubject = new BehaviorSubject<CatalogTaxonomy[]>(
     this.readInitialTaxonomies('collection'),
   );
+  private readonly subcategoriesSubject = new BehaviorSubject<CatalogTaxonomy[]>(
+    this.readInitialTaxonomies('subcategory'),
+  );
   private readonly loadingSubject = new BehaviorSubject<boolean>(isFirebaseConfigured && !!this.firestore);
 
   readonly loading$ = this.loadingSubject.asObservable();
   readonly categories$ = this.categoriesSubject.asObservable();
+  readonly subcategories$ = this.subcategoriesSubject.asObservable();
   readonly collections$ = this.collectionsSubject.asObservable();
-  readonly all$ = combineLatest([this.categories$, this.collections$]).pipe(
-    map(([categories, collections]) => ({ categories, collections })),
+  readonly all$ = combineLatest([this.categories$, this.subcategories$, this.collections$]).pipe(
+    map(([categories, subcategories, collections]) => ({ categories, subcategories, collections })),
   );
 
   constructor() {
@@ -47,7 +52,7 @@ export class TaxonomiesService {
       return;
     }
 
-    let pendingStreams = 2;
+    let pendingStreams = 3;
     const completeStream = () => {
       pendingStreams -= 1;
 
@@ -62,6 +67,19 @@ export class TaxonomiesService {
     ).subscribe({
       next: (items) => {
         this.categoriesSubject.next(
+          this.sortTaxonomies((items as Array<SerializedCatalogTaxonomy>).map((item) => reviveTaxonomy(item))),
+        );
+        completeStream();
+      },
+      error: () => completeStream(),
+    });
+
+    collectionData(
+      query(collection(this.firestore, firestoreCollections.productSubcategories), orderBy('name', 'asc')),
+      { idField: 'id' },
+    ).subscribe({
+      next: (items) => {
+        this.subcategoriesSubject.next(
           this.sortTaxonomies((items as Array<SerializedCatalogTaxonomy>).map((item) => reviveTaxonomy(item))),
         );
         completeStream();
@@ -89,6 +107,10 @@ export class TaxonomiesService {
 
   get collectionsSnapshot(): CatalogTaxonomy[] {
     return this.collectionsSubject.value;
+  }
+
+  get subcategoriesSnapshot(): CatalogTaxonomy[] {
+    return this.subcategoriesSubject.value;
   }
 
   async createTaxonomy(type: TaxonomyType, draft: TaxonomyDraft): Promise<CatalogTaxonomy> {
@@ -163,10 +185,12 @@ export class TaxonomiesService {
     );
   }
 
-  async syncFromProducts(products: Product[]): Promise<{ categories: number; collections: number }> {
+  async syncFromProducts(products: Product[]): Promise<{ categories: number; subcategories: number; collections: number }> {
     const nextCategories = this.mergeWithProducts(this.categoriesSubject.value, products, 'category');
+    const nextSubcategories = this.mergeWithProducts(this.subcategoriesSubject.value, products, 'subcategory');
     const nextCollections = this.mergeWithProducts(this.collectionsSubject.value, products, 'collection');
     const addedCategories = Math.max(0, nextCategories.length - this.categoriesSubject.value.length);
+    const addedSubcategories = Math.max(0, nextSubcategories.length - this.subcategoriesSubject.value.length);
     const addedCollections = Math.max(0, nextCollections.length - this.collectionsSubject.value.length);
 
     if (isFirebaseConfigured && this.firestore) {
@@ -180,14 +204,20 @@ export class TaxonomiesService {
         batch.set(this.getTaxonomyDoc('collection', item.id), item);
       }
 
+      for (const item of nextSubcategories) {
+        batch.set(this.getTaxonomyDoc('subcategory', item.id), item);
+      }
+
       await batch.commit();
     } else {
       this.setLocalTaxonomies('category', nextCategories);
+      this.setLocalTaxonomies('subcategory', nextSubcategories);
       this.setLocalTaxonomies('collection', nextCollections);
     }
 
     return {
       categories: addedCategories,
+      subcategories: addedSubcategories,
       collections: addedCollections,
     };
   }
@@ -200,7 +230,13 @@ export class TaxonomiesService {
     const entries = new Map(current.map((item) => [item.slug, item]));
     const values = type === 'category'
       ? products.map((product) => ({ name: product.category, slug: product.categorySlug }))
-      : products
+      : type === 'subcategory'
+        ? products
+            .filter((product): product is Product & { subcategory: string; subcategorySlug: string } =>
+              !!product.subcategory && !!product.subcategorySlug,
+            )
+            .map((product) => ({ name: product.subcategory, slug: product.subcategorySlug }))
+        : products
           .filter((product): product is Product & { collection: string; collectionSlug: string } =>
             !!product.collection && !!product.collectionSlug,
           )
@@ -267,17 +303,27 @@ export class TaxonomiesService {
       this.firestore!,
       type === 'category'
         ? firestoreCollections.productCategories
+        : type === 'subcategory'
+          ? firestoreCollections.productSubcategories
         : firestoreCollections.productCollections,
       taxonomyId,
     );
   }
 
   private getSubject(type: TaxonomyType) {
-    return type === 'category' ? this.categoriesSubject : this.collectionsSubject;
+    return type === 'category'
+      ? this.categoriesSubject
+      : type === 'subcategory'
+        ? this.subcategoriesSubject
+        : this.collectionsSubject;
   }
 
   private getStorageKey(type: TaxonomyType): string {
-    return type === 'category' ? CATEGORY_STORAGE_KEY : COLLECTION_STORAGE_KEY;
+    return type === 'category'
+      ? CATEGORY_STORAGE_KEY
+      : type === 'subcategory'
+        ? SUBCATEGORY_STORAGE_KEY
+        : COLLECTION_STORAGE_KEY;
   }
 
   private sortTaxonomies(items: CatalogTaxonomy[]): CatalogTaxonomy[] {

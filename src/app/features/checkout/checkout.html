@@ -1,21 +1,15 @@
 <section class="checkout-shell">
   <div class="section-heading">
-    <p class="eyebrow">Checkout sin pasarela</p>
-    <h1>Preparar pedido</h1>
-    <p>Generaremos un pedido estructurado y un mensaje listo para enviar por WhatsApp.</p>
+    <p class="eyebrow">Checkout</p>
+    <h1>Finalizar pedido</h1>
+    <p>Introduce tus datos, añade un comentario si lo necesitas y te mostraremos el pago por Bizum al terminar.</p>
   </div>
-
-  @if (isSubmitting) {
-    <mat-progress-bar mode="indeterminate"></mat-progress-bar>
-  }
 
   @if (lastOrder) {
     <div class="order-confirmation">
-      <p class="eyebrow">Pedido preparado</p>
-      <h2>Tu pedido ya está registrado</h2>
-      <p>
-        Hemos guardado el pedido, descontado stock y dejado el mensaje listo para enviarlo por WhatsApp.
-      </p>
+      <p class="eyebrow">Pedido registrado</p>
+      <h2>Ya puedes completar el Bizum</h2>
+      <p>Tu pedido queda en estado <strong>En fábrica</strong> hasta confirmar el pago y comenzar la preparación.</p>
 
       <div class="confirmation-card">
         <div class="confirmation-meta">
@@ -27,14 +21,21 @@
           <strong>{{ lastOrder.total | currency: 'EUR' }}</strong>
         </div>
         <div class="confirmation-meta">
-          <span>Entrega</span>
-          <strong>{{ getDeliveryLabel(lastOrder.customer.deliveryMethod) }}</strong>
+          <span>Bizum</span>
+          <strong>{{ shopSettingsService.settingsSnapshot.bizumPhone }}</strong>
         </div>
         <div class="confirmation-meta">
-          <span>Destino</span>
-          <strong>{{ lastOrder.customer.postalCode }} {{ lastOrder.customer.city }}</strong>
+          <span>Concepto</span>
+          <strong>{{ lastOrder.id }}</strong>
         </div>
       </div>
+
+      @if (lastOrder.discount) {
+        <p class="discount-note">
+          Código aplicado: <strong>{{ lastOrder.discount.code }}</strong>
+          · descuento {{ lastOrder.discount.amount | currency: 'EUR' }}
+        </p>
+      }
 
       <div class="confirmation-items">
         @for (item of lastOrder.items; track item.productId + item.variant) {
@@ -50,22 +51,14 @@
       </div>
 
       <div class="confirmation-actions">
-        @if (whatsappUrl) {
-          <a class="button whatsapp" [href]="whatsappUrl" target="_blank" rel="noreferrer">
-            Enviar por WhatsApp
-          </a>
-        }
-        <a class="button primary" routerLink="/pedidos">Ver mis pedidos</a>
+        <a class="button primary" routerLink="/">Volver a la tienda</a>
+        <a class="button ghost" routerLink="/consultas">Tengo una consulta</a>
       </div>
     </div>
   } @else if (summary$ | async; as summary) {
     @if (summary.items.length > 0) {
       <div class="checkout-layout">
         <form class="checkout-form" [formGroup]="checkoutForm" (ngSubmit)="prepareOrder(summary)">
-          <div class="form-section wide">
-            <p class="section-kicker">Contacto</p>
-          </div>
-
           <label>
             Nombre
             <input type="text" formControlName="name" autocomplete="name" />
@@ -91,27 +84,19 @@
           }
 
           <label>
-            Entrega
-            <select formControlName="deliveryMethod">
-              <option value="shipping">Envío</option>
-              <option value="pickup">Recogida</option>
-            </select>
+            DNI
+            <input type="text" formControlName="dni" />
           </label>
+          @if (getControlErrorMessage('dni'); as message) {
+            <p class="form-error">{{ message }}</p>
+          }
 
-          <p class="delivery-help wide">{{ deliveryHelpText }}</p>
-
-          <div class="form-section wide">
-            <p class="section-kicker">Dirección</p>
-          </div>
-
-          @if (isShipping) {
-            <label class="wide">
-              Dirección
-              <input type="text" formControlName="addressLine1" autocomplete="address-line1" />
-            </label>
-            @if (addressErrorMessage) {
-              <p class="form-error wide">{{ addressErrorMessage }}</p>
-            }
+          <label class="wide">
+            Dirección
+            <input type="text" formControlName="addressLine1" autocomplete="address-line1" />
+          </label>
+          @if (getControlErrorMessage('addressLine1'); as message) {
+            <p class="form-error wide">{{ message }}</p>
           }
 
           <label>
@@ -138,9 +123,14 @@
             <p class="form-error">{{ message }}</p>
           }
 
+          <label>
+            Código de descuento
+            <input type="text" formControlName="discountCode" placeholder="Opcional" />
+          </label>
+
           <label class="wide">
-            Notas para el pedido
-            <textarea rows="4" formControlName="notes"></textarea>
+            Comentario para el pedido
+            <textarea rows="4" formControlName="comments" placeholder="Ej. para regalo, lo quiero rosa, te escribí por WhatsApp..."></textarea>
           </label>
 
           <label class="checkbox-row wide">
@@ -159,36 +149,57 @@
             <p class="form-error wide">{{ errorMessage }}</p>
           }
 
-          <button class="button primary" type="submit" [disabled]="isSubmitting">
+          <button class="button primary wide" type="submit" [disabled]="isSubmitting">
             @if (isSubmitting) {
               <mat-spinner diameter="18"></mat-spinner>
             }
-            {{ isSubmitting ? 'Guardando pedido...' : 'Preparar pedido' }}
+            {{ isSubmitting ? 'Guardando pedido...' : 'Crear pedido y ver Bizum' }}
           </button>
         </form>
 
         <aside class="order-preview">
           <h2>Resumen del pedido</h2>
-          <div class="preview-block">
-            <span>Entrega</span>
-            <strong>{{ getDeliveryLabel(checkoutForm.controls.deliveryMethod.value) }}</strong>
-          </div>
           @for (item of summary.items; track item.product.id + item.variant) {
             <div class="preview-item">
               <span>{{ item.quantity }} x {{ item.product.name }}</span>
               <strong>{{ getLineTotal(item) | currency: 'EUR' }}</strong>
             </div>
           }
+
           <div class="preview-total">
-            <span>Total</span>
-            <strong>{{ summary.total | currency: 'EUR' }}</strong>
+            <span>Subtotal</span>
+            <strong>{{ summary.subtotal | currency: 'EUR' }}</strong>
           </div>
+
+          @if (discountPreview$ | async; as discount) {
+            @if (discount) {
+              <div class="preview-total discount-row">
+                <span>Descuento {{ discount.code.code }}</span>
+                <strong>-{{ discount.amount | currency: 'EUR' }}</strong>
+              </div>
+            }
+          }
+
+          <div class="preview-total">
+            <span>Envío</span>
+            <strong>{{ shopSettingsService.settingsSnapshot.shippingPrice | currency: 'EUR' }}</strong>
+          </div>
+
+          <div class="preview-total grand-total">
+            <span>Total</span>
+            <strong>{{ finalTotal$ | async | currency: 'EUR' }}</strong>
+          </div>
+
+          <p class="preview-note">
+            Al confirmar, te mostraremos el número Bizum {{ shopSettingsService.settingsSnapshot.bizumPhone }}
+            y la referencia del pedido.
+          </p>
         </aside>
       </div>
     } @else {
       <div class="empty-checkout">
         <h2>No hay productos para preparar el pedido.</h2>
-        <a class="button primary" routerLink="/">Volver a la tienda</a>
+        <a class="button primary" routerLink="/">Volver al catálogo</a>
       </div>
     }
   }

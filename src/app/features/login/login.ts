@@ -5,7 +5,6 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
-import { UserRole } from '../../core/models/user.model';
 import { environment } from '../../../environments/environment';
 import { AlertsService } from '../../core/services/alerts.service';
 import { AuthService } from '../../core/services/auth.service';
@@ -29,16 +28,12 @@ export class Login {
   readonly isFirebasePopupMode = this.authMode === 'firebase';
   readonly isEmulatorMode = this.authMode === 'emulator';
   readonly user$ = this.authService.user$;
-  readonly requestedRole = (this.route.snapshot.queryParamMap.get('role') as UserRole | null) ?? 'customer';
-  readonly returnUrl = this.route.snapshot.queryParamMap.get('returnUrl') ?? '/';
+  readonly returnUrl = this.route.snapshot.queryParamMap.get('returnUrl') ?? '/admin';
   readonly adminEmail = environment.firebase.adminEmails[0] ?? '';
   readonly loginForm = this.formBuilder.nonNullable.group({
-    name: [this.requestedRole === 'admin' ? 'Virginia Admin' : 'Cliente Martura', [Validators.required]],
-    email: [
-      this.requestedRole === 'admin' ? this.adminEmail : 'cliente@martura.test',
-      [Validators.required, Validators.email],
-    ],
-    role: [this.requestedRole, [Validators.required]],
+    name: ['Virginia Admin', [Validators.required]],
+    email: [this.adminEmail, [Validators.required, Validators.email]],
+    role: ['admin' as const, [Validators.required]],
   });
   errorMessage: string | null = null;
   isSubmitting = false;
@@ -47,20 +42,14 @@ export class Login {
     this.authService.user$
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((user) => {
-        if (!user) {
-          return;
+        if (user?.role === 'admin') {
+          void this.router.navigateByUrl(this.returnUrl);
         }
-
-        if (this.requestedRole === 'admin' && user.role !== 'admin') {
-          return;
-        }
-
-        void this.router.navigateByUrl(this.returnUrl);
       });
   }
 
   async login(): Promise<void> {
-    if (this.requestedRole === 'admin' && !this.adminEmail) {
+    if (!this.adminEmail) {
       this.errorMessage =
         'Falta configurar un correo administrador autorizado en el entorno antes de abrir el dashboard.';
       await this.alertsService.error('Configuración incompleta', this.errorMessage);
@@ -81,8 +70,8 @@ export class Login {
         this.isFirebasePopupMode
           ? {
               name: '',
-              email: this.requestedRole === 'admin' ? this.adminEmail : '',
-              role: this.requestedRole,
+              email: this.adminEmail,
+              role: 'admin',
             }
           : this.loginForm.getRawValue(),
       );
@@ -100,23 +89,19 @@ export class Login {
   }
 
   get title(): string {
-    return this.requestedRole === 'admin' ? 'Acceso administrador' : 'Identifícate para cerrar tu pedido';
+    return 'Acceso administrador';
   }
 
   get description(): string {
     if (this.isFirebasePopupMode) {
-      return this.requestedRole === 'admin'
-        ? 'Entra con Google usando el correo autorizado para gestionar catálogo, stock y pedidos.'
-        : 'Entra con Google para asociar el pedido a tu cuenta y poder consultar su estado después.';
+      return 'Entra con Google usando el correo autorizado para gestionar catálogo, pedidos, promociones y ajustes.';
     }
 
     if (this.isEmulatorMode) {
-      return this.requestedRole === 'admin'
-        ? 'Entrarás contra el emulador local con el correo administrador configurado, sin popup de Google.'
-        : 'Entrarás contra el emulador local con un usuario de pruebas para validar carrito, checkout y pedidos.';
+      return 'Entrarás contra el emulador local con el correo administrador configurado, sin popup de Google.';
     }
 
-    return 'Este acceso sigue en modo mock para validar el flujo del MVP antes de conectar proveedores reales.';
+    return 'Este acceso sigue en modo mock para validar la gestión interna antes de cerrar integraciones finales.';
   }
 
   get submitLabel(): string {
@@ -125,14 +110,14 @@ export class Login {
     }
 
     if (this.isFirebasePopupMode) {
-      return this.requestedRole === 'admin' ? 'Entrar con Google' : 'Continuar con Google';
+      return 'Entrar con Google';
     }
 
     if (this.isEmulatorMode) {
-      return this.requestedRole === 'admin' ? 'Entrar al emulador admin' : 'Entrar al emulador';
+      return 'Entrar al emulador admin';
     }
 
-    return this.requestedRole === 'admin' ? 'Entrar al dashboard' : 'Continuar al checkout';
+    return 'Entrar al dashboard';
   }
 
   get submittingMessage(): string {

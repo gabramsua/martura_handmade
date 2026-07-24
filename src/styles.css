@@ -3,17 +3,17 @@
 
 :root {
   color-scheme: light;
-  --ink: #25201d;
-  --muted: #736a63;
-  --line: #e8ded6;
-  --paper: #fffaf5;
-  --surface: #ffffff;
-  --rose: #9f5f5f;
-  --rose-dark: #774343;
-  --sage: #5f7568;
-  --clay: #c9835d;
-  --sand: #f3e7da;
-  --shadow: 0 18px 45px rgba(60, 42, 35, 0.11);
+  --ink: #4b3a31;
+  --muted: #7b6a5d;
+  --line: #e7d9cc;
+  --paper: #faf2eb;
+  --surface: #fffaf5;
+  --rose: #c89096;
+  --rose-dark: #99656c;
+  --sage: #8e9570;
+  --clay: #c49a75;
+  --sand: #efe1d3;
+  --shadow: 0 18px 45px rgba(75, 58, 49, 0.09);
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
@@ -27,8 +27,10 @@ html {
 }
 
 body {
+  background:
+    radial-gradient(circle at top, rgba(255, 255, 255, 0.72), transparent 28%),
+    var(--paper);
   margin: 0;
-  background: var(--paper);
   color: var(--ink);
 }
 
@@ -58,6 +60,7 @@ button,
 
 .button {
   align-items: center;
+  border: 1px solid transparent;
   display: inline-flex;
   font-weight: 700;
   justify-content: center;
@@ -70,8 +73,9 @@ button,
 }
 
 .button.ghost {
-  background: rgba(255, 255, 255, 0.76);
-  border: 1px solid rgba(255, 255, 255, 0.86);
+  background: rgba(255, 255, 255, 0.8);
+  border-color: var(--line);
+  color: var(--ink);
 }
 
 .eyebrow {

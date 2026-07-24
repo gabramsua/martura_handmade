@@ -8,8 +8,6 @@ import {
   getDocs,
   orderBy,
   query,
-  runTransaction,
-  where,
   writeBatch,
 } from '@angular/fire/firestore';
 import { FirebaseError } from 'firebase/app';
@@ -25,11 +23,8 @@ import {
 import { firestoreCollections, isFirebaseConfigured } from '../firebase/firebase.config';
 import { getMarturaFunctions } from '../firebase/firebase.lazy';
 import { reviveOrder } from '../firebase/firestore.mappers';
-import { AppUser } from '../models/user.model';
-import { isProductVisible, normalizeProductStatus, ProductStatus } from '../models/product.model';
 import { AuthService } from './auth.service';
 import { LocalStorageService } from './local-storage.service';
-import { ProductsService } from './products.service';
 
 const ORDERS_STORAGE_KEY = 'martura_orders';
 
@@ -38,25 +33,16 @@ export class OrdersService {
   private readonly firestore = inject(Firestore, { optional: true });
   private readonly authService = inject(AuthService);
   private readonly localStorageService = inject(LocalStorageService);
-  private readonly productsService = inject(ProductsService);
-  private readonly ordersSubject = new BehaviorSubject<CheckoutOrder[]>(
-    this.readInitialOrders(),
-  );
+  private readonly ordersSubject = new BehaviorSubject<CheckoutOrder[]>(this.readInitialOrders());
 
   readonly orders$ = isFirebaseConfigured && this.firestore
-    ? this.authService.user$.pipe(
-        switchMap((user) => this.getRemoteOrders(user)),
+    ? this.authService.isAdmin$.pipe(
+        switchMap((isAdmin) => this.getRemoteOrders(isAdmin)),
       )
     : this.ordersSubject.asObservable();
   readonly pendingOrders$ = this.orders$.pipe(
     map((orders) => orders.filter((order) => isOrderActive(order.status))),
   );
-
-  getOrdersForUser(userId: string | null) {
-    return this.orders$.pipe(
-      map((orders) => orders.filter((order) => !!userId && order.userId === userId)),
-    );
-  }
 
   async saveDraft(order: CheckoutOrder): Promise<void> {
     this.setOrders([order, ...this.ordersSubject.value]);
@@ -77,26 +63,18 @@ export class OrdersService {
     const order = this.ordersSubject.value.find((entry) => entry.id === orderId);
 
     if (!order) {
-      throw new Error('No se encontro el pedido que intentas actualizar.');
-    }
-
-    if (order.status === status) {
-      return;
-    }
-
-    const updatedAt = new Date();
-
-    if (this.shouldReleaseInventory(order.status, status)) {
-      await this.productsService.releaseOrder(order.items);
-    }
-
-    if (this.shouldReserveInventory(order.status, status)) {
-      await this.productsService.reserveOrder(order.items);
+      throw new Error('No se encontró el pedido que intentas actualizar.');
     }
 
     this.setOrders(
-      this.ordersSubject.value.map((order) =>
-        order.id === orderId ? { ...order, status, updatedAt } : order,
+      this.ordersSubject.value.map((entry) =>
+        entry.id === orderId
+          ? {
+              ...entry,
+              status,
+              updatedAt: new Date(),
+            }
+          : entry,
       ),
     );
   }
@@ -104,17 +82,10 @@ export class OrdersService {
   async clearOrders(): Promise<void> {
     if (isFirebaseConfigured && this.firestore) {
       const batch = writeBatch(this.firestore);
-      const ordersCollection = collection(this.firestore, firestoreCollections.orders);
-      const customersCollection = collection(this.firestore, firestoreCollections.customers);
-      const snapshot = await getDocs(ordersCollection);
-      const customersSnapshot = await getDocs(customersCollection);
+      const ordersSnapshot = await getDocs(collection(this.firestore, firestoreCollections.orders));
 
-      for (const order of snapshot.docs) {
+      for (const order of ordersSnapshot.docs) {
         batch.delete(order.ref);
-      }
-
-      for (const customer of customersSnapshot.docs) {
-        batch.delete(customer.ref);
       }
 
       await batch.commit();
@@ -129,34 +100,23 @@ export class OrdersService {
     this.localStorageService.write(ORDERS_STORAGE_KEY, orders);
   }
 
-  private getRemoteOrders(user: AppUser | null) {
-    if (!this.firestore || !user) {
+  private getRemoteOrders(isAdmin: boolean) {
+    if (!this.firestore || !isAdmin) {
       return of<CheckoutOrder[]>([]);
     }
 
     const ordersCollection = collection(this.firestore, firestoreCollections.orders);
-    const ordersQuery = user.role === 'admin'
-      ? query(ordersCollection, orderBy('createdAt', 'desc'))
-      : query(
-          ordersCollection,
-          where('userId', '==', user.id),
-        );
+    const ordersQuery = query(ordersCollection, orderBy('createdAt', 'desc'));
 
     return collectionData(ordersQuery, { idField: 'id' }).pipe(
       map((orders) =>
-        this.sortOrdersByCreatedAt(
-          (orders as Array<SerializedCheckoutOrder>).map((order) => reviveOrder(order)),
-        ),
+        (orders as Array<SerializedCheckoutOrder>).map((order) => reviveOrder(order)),
       ),
       catchError((error) => {
         console.error('No se pudieron cargar los pedidos desde Firestore.', error);
         return of<CheckoutOrder[]>([]);
       }),
     );
-  }
-
-  private sortOrdersByCreatedAt(orders: CheckoutOrder[]): CheckoutOrder[] {
-    return [...orders].sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime());
   }
 
   private readInitialOrders(): CheckoutOrder[] {
@@ -167,10 +127,6 @@ export class OrdersService {
     return this.localStorageService.read<CheckoutOrder[]>(ORDERS_STORAGE_KEY, [], (orders) =>
       (orders as Array<CheckoutOrder & { createdAt: unknown }>).map((order) => reviveOrder(order)),
     );
-  }
-
-  private getOrderDoc(orderId: string) {
-    return doc(this.firestore!, firestoreCollections.orders, orderId);
   }
 
   private async updateStatusWithFunction(
@@ -188,114 +144,6 @@ export class OrdersService {
     } catch (error) {
       throw this.mapFunctionsError(error);
     }
-  }
-
-  private async updateStatusInFirestore(
-    orderId: string,
-    status: OrderStatus,
-    updatedAt: Date,
-  ): Promise<void> {
-    const firestore = this.firestore!;
-
-    await runTransaction(firestore, async (transaction) => {
-      const orderDoc = this.getOrderDoc(orderId);
-      const orderSnapshot = await transaction.get(orderDoc);
-
-      if (!orderSnapshot.exists()) {
-        throw new Error('No se encontro el pedido que intentas actualizar.');
-      }
-
-      const order = reviveOrder({
-        id: orderId,
-        ...(orderSnapshot.data() as Omit<CheckoutOrder, 'id' | 'createdAt' | 'updatedAt'> & {
-          createdAt: unknown;
-          updatedAt?: unknown;
-        }),
-      });
-
-      if (this.shouldReleaseInventory(order.status, status)) {
-        const quantities = this.groupOrderItems(order);
-
-        for (const [productId, quantity] of quantities.entries()) {
-          const productDoc = doc(firestore, firestoreCollections.products, productId);
-          const productSnapshot = await transaction.get(productDoc);
-
-          if (!productSnapshot.exists()) {
-            continue;
-          }
-
-          const product = productSnapshot.data() as {
-            stock?: number;
-            status?: ProductStatus;
-          };
-          const currentStock = typeof product.stock === 'number' ? product.stock : 0;
-          const currentStatus = normalizeProductStatus(product.status, currentStock);
-          const nextStock = currentStock + quantity;
-
-          transaction.update(productDoc, {
-            stock: nextStock,
-            status: normalizeProductStatus(currentStatus, nextStock),
-          });
-        }
-      }
-
-      if (this.shouldReserveInventory(order.status, status)) {
-        const quantities = this.groupOrderItems(order);
-
-        for (const [productId, quantity] of quantities.entries()) {
-          const productDoc = doc(firestore, firestoreCollections.products, productId);
-          const productSnapshot = await transaction.get(productDoc);
-
-          if (!productSnapshot.exists()) {
-            const item = order.items.find((entry) => entry.productId === productId);
-            throw new Error(`La pieza "${item?.productName ?? productId}" ya no esta disponible.`);
-          }
-
-          const product = productSnapshot.data() as {
-            stock?: number;
-            status?: ProductStatus;
-          };
-          const currentStock = typeof product.stock === 'number' ? product.stock : 0;
-          const currentStatus = normalizeProductStatus(product.status, currentStock);
-          const item = order.items.find((entry) => entry.productId === productId);
-
-          if (!isProductVisible({ status: currentStatus })) {
-            throw new Error(`La pieza "${item?.productName ?? productId}" ya no esta disponible.`);
-          }
-
-          if (currentStock < quantity) {
-            throw new Error(`Solo quedan ${currentStock} unidades de "${item?.productName ?? productId}".`);
-          }
-
-          const nextStock = currentStock - quantity;
-
-          transaction.update(productDoc, {
-            stock: nextStock,
-            status: normalizeProductStatus(currentStatus, nextStock),
-          });
-        }
-      }
-
-      transaction.update(orderDoc, {
-        status,
-        updatedAt,
-      });
-    });
-  }
-
-  private shouldReleaseInventory(currentStatus: OrderStatus, nextStatus: OrderStatus): boolean {
-    return currentStatus !== 'cancelled' && nextStatus === 'cancelled';
-  }
-
-  private shouldReserveInventory(currentStatus: OrderStatus, nextStatus: OrderStatus): boolean {
-    return currentStatus === 'cancelled' && nextStatus !== 'cancelled';
-  }
-
-  private groupOrderItems(order: CheckoutOrder): Map<string, number> {
-    return order.items.reduce((quantities, item) => {
-      quantities.set(item.productId, (quantities.get(item.productId) ?? 0) + item.quantity);
-      return quantities;
-    }, new Map<string, number>());
   }
 
   private mapFunctionsError(error: unknown): Error {

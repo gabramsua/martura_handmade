@@ -6,10 +6,11 @@ import { map, switchMap } from 'rxjs';
 import { Campaign } from '../../core/models/campaign.model';
 import { isProductAvailable, Product } from '../../core/models/product.model';
 import { resolveProductPricing } from '../../core/utils/product-pricing';
-import { AuthService } from '../../core/services/auth.service';
+import { AlertsService } from '../../core/services/alerts.service';
 import { CampaignsService } from '../../core/services/campaigns.service';
 import { CartService } from '../../core/services/cart.service';
 import { ProductsService } from '../../core/services/products.service';
+import { ShopSettingsService } from '../../core/services/shop-settings.service';
 
 @Component({
   selector: 'app-product-detail',
@@ -20,21 +21,41 @@ import { ProductsService } from '../../core/services/products.service';
 })
 export class ProductDetail {
   private readonly route = inject(ActivatedRoute);
-  private readonly authService = inject(AuthService);
+  private readonly alertsService = inject(AlertsService);
   private readonly campaignsService = inject(CampaignsService);
   private readonly productsService = inject(ProductsService);
   private readonly cartService = inject(CartService);
+  readonly shopSettingsService = inject(ShopSettingsService);
   readonly selectedImageUrl = signal<string | null>(null);
 
-  readonly isAdmin$ = this.authService.isAdmin$;
   readonly product$ = this.route.paramMap.pipe(
     map((params) => params.get('slug') ?? ''),
     switchMap((slug) => this.productsService.getProductBySlug(slug)),
     switchMap((product) => this.campaignsService.activeCampaigns$.pipe(map(() => product))),
   );
 
-  addToCart(product: Product, variant: string): void {
-    this.cartService.addItem(product, variant);
+  addToCart(product: Product, variant?: string): void {
+    this.cartService.addItem(product, variant ?? product.sizes[0] ?? 'Única');
+  }
+
+  async shareProduct(product: Product): Promise<void> {
+    const shareUrl = new URL(`/producto/${product.slug}`, window.location.origin).toString();
+
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: product.name,
+          text: `${product.name} · Martura Handmade`,
+          url: shareUrl,
+        });
+        return;
+      }
+
+      await navigator.clipboard.writeText(shareUrl);
+      this.alertsService.toast('success', 'Enlace copiado al portapapeles.');
+    } catch {
+      this.alertsService.toast('error', 'No se pudo compartir este producto.');
+    }
   }
 
   selectImage(imageUrl: string): void {
@@ -68,10 +89,6 @@ export class ProductDetail {
     return pricing.hasDiscount ? pricing.originalPrice : null;
   }
 
-  getCampaignLabel(product: Product): string | null {
-    return resolveProductPricing(product, this.campaignsService.activeCampaignsSnapshot).campaignName;
-  }
-
   getCampaignSummary(product: Product): string | null {
     const campaign = this.getResolvedCampaign(product);
 
@@ -84,7 +101,7 @@ export class ProductDetail {
   }
 
   getTaxonomyLabel(product: Product): string {
-    return product.collection ? `${product.category} - ${product.collection}` : product.category;
+    return [product.category, product.subcategory, product.collection].filter(Boolean).join(' · ');
   }
 
   private getResolvedCampaign(product: Product): Campaign | null {

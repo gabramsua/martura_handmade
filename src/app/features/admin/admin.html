@@ -1,1333 +1,656 @@
-﻿<section class="admin-shell">
-  @if (isBusy()) {
-    <div class="admin-busy-overlay" aria-live="polite" aria-busy="true">
-      <mat-spinner diameter="44"></mat-spinner>
-      <span>{{ busyMessage() }}</span>
+<section class="admin-shell">
+  <aside class="admin-sidebar">
+    <div class="admin-brand">
+      <p class="eyebrow">Dashboard privado</p>
+      <strong>Martura Handmade</strong>
+      <small>{{ modeLabel }}</small>
     </div>
-  }
 
-  <div class="admin-frame">
-    <aside class="admin-rail">
-      <div class="admin-rail-brand">
-        <p class="eyebrow">Dashboard privado</p>
-        <strong>Martura Handmade</strong>
-        <small>{{ modeLabel }}</small>
-      </div>
-
-      <nav class="workspace-nav" aria-label="Secciones del dashboard">
-        @for (item of workspaceNavItems; track trackWorkspace($index, item)) {
-          <button
-            type="button"
-            class="workspace-nav-item"
-            [class.workspace-nav-item-active]="activeWorkspace() === item.key"
-            (click)="setWorkspace(item.key)">
-            <span>{{ item.label }}</span>
-            <small>{{ item.caption }}</small>
-          </button>
-        }
-      </nav>
-
-      <div class="rail-actions">
-        <button type="button" class="rail-primary-action" (click)="setWorkspace('product'); resetForm()">
-          Nuevo producto
-        </button>
+    <nav class="admin-nav">
+      @for (item of navItems; track item.key) {
         <button
           type="button"
-          class="secondary-button"
-          [disabled]="isSyncingCustomers()"
-          (click)="setWorkspace('customers'); rebuildCustomers()">
-          {{ isSyncingCustomers() ? 'Sincronizando...' : 'Sincronizar clientas' }}
+          class="nav-item"
+          [class.nav-item-active]="isNavActive(item.key)"
+          (click)="setView(item.key)">
+          <span>{{ item.label }}</span>
+          <small>{{ item.caption }}</small>
         </button>
-        <button
-          type="button"
-          class="secondary-button"
-          [disabled]="isResettingProducts()"
-          (click)="setWorkspace('catalog'); resetProducts()">
-          {{ isResettingProducts() ? 'Restaurando...' : 'Restaurar demo' }}
-        </button>
-      </div>
-    </aside>
-
-    <div class="admin-content">
-      <div class="admin-heading">
-        <div>
-          <p class="eyebrow">Workspace actual</p>
-          <h1>{{ currentWorkspace().label }}</h1>
-          <p class="workspace-description">{{ currentWorkspace().caption }}</p>
-        </div>
-        <div class="heading-actions">
-          <span class="workspace-pill">{{ modeLabel }}</span>
-          <span class="workspace-pill workspace-pill-soft">Martura admin</span>
-        </div>
-      </div>
-
-      @if (feedbackMessage(); as message) {
-        <p class="feedback-banner success">{{ message }}</p>
       }
+    </nav>
 
-      @if (errorMessage(); as message) {
-        <p class="feedback-banner error">{{ message }}</p>
-      }
+    <div class="sidebar-actions">
+      <button type="button" class="button primary" (click)="setView('product'); resetProductForm()">
+        Nuevo producto
+      </button>
+    </div>
+  </aside>
 
-      @if ((loading$ | async) || (campaignsLoading$ | async) || (customersLoading$ | async) || (taxonomiesLoading$ | async)) {
-        <mat-progress-bar mode="indeterminate"></mat-progress-bar>
-      }
-
-      @if (activeWorkspace() === 'overview') {
-        @if (stats$ | async; as stats) {
-          <div class="stats-grid">
-            <article>
-              <span>Facturación activa</span>
-              <strong>{{ stats.revenue | currency: 'EUR' : 'symbol' : '1.0-0' }}</strong>
-              <small>Pedidos no cancelados</small>
-            </article>
-            <article>
-              <span>Ticket medio</span>
-              <strong>{{ stats.averageTicket | currency: 'EUR' : 'symbol' : '1.0-0' }}</strong>
-              <small>Media por pedido válido</small>
-            </article>
-            <article>
-              <span>Clientas</span>
-              <strong>{{ stats.customers }}</strong>
-              <small>Base de compra registrada</small>
-            </article>
-            <article>
-              <span>Recurrentes</span>
-              <strong>{{ stats.repeatCustomers }}</strong>
-              <small>Más de un pedido</small>
-            </article>
-            <article>
-              <span>Pedidos pendientes</span>
-              <strong>{{ stats.pendingOrders }}</strong>
-              <small>Requieren acción</small>
-            </article>
-            <article>
-              <span>Productos</span>
-              <strong>{{ stats.products }}</strong>
-              <small>Catálogo total</small>
-            </article>
-            <article>
-              <span>Stock bajo</span>
-              <strong>{{ stats.lowStock }}</strong>
-              <small>Piezas con 4 o menos</small>
-            </article>
-            <article>
-              <span>Agotados</span>
-              <strong>{{ stats.soldOut }}</strong>
-              <small>Sin unidades disponibles</small>
-            </article>
-            <article>
-              <span>Campañas activas</span>
-              <strong>{{ stats.activeCampaigns }}</strong>
-              <small>Promos en marcha</small>
-            </article>
-            <article>
-              <span>Valor inventario</span>
-              <strong>{{ stats.inventoryValue | currency: 'EUR' : 'symbol' : '1.0-0' }}</strong>
-              <small>Valor estimado del stock</small>
-            </article>
-          </div>
-        }
-
-        @if (dashboardRadar$ | async; as radar) {
-          <section class="dashboard-radar">
-      <article class="admin-panel">
-        <div class="panel-title">
-          <h2>Radar comercial</h2>
-          <span>Clientas top</span>
-        </div>
-
-        <div class="customer-spotlight-list">
-          @for (customer of radar.topCustomers; track customer.id) {
-            <article class="customer-spotlight-card">
-              <div>
-                <strong>{{ customer.name }}</strong>
-                <small>{{ customer.email }}</small>
-              </div>
-              <div class="customer-spotlight-metrics">
-                <span>{{ customer.totalOrders }} pedidos</span>
-                <strong>{{ customer.totalSpent | currency: 'EUR' }}</strong>
-              </div>
-            </article>
-          } @empty {
-            <p class="muted">Todavía no hay suficiente histórico para destacar clientas.</p>
-          }
-        </div>
-      </article>
-
-      <article class="admin-panel">
-        <div class="panel-title">
-          <h2>Stock sensible</h2>
-          <span>Reponer pronto</span>
-        </div>
-
-        <div class="stock-watch-list">
-          @for (product of radar.lowStockProducts; track product.id) {
-            <article class="stock-watch-card">
-              <div>
-                <strong>{{ product.name }}</strong>
-                <small>{{ getProductTaxonomy(product) }}</small>
-              </div>
-              <div class="stock-watch-metrics">
-                <span>{{ getProductPrice(product) | currency: 'EUR' }}</span>
-                <mark class="status-badge status-badge-muted">{{ product.stock }} uds</mark>
-              </div>
-            </article>
-          } @empty {
-            <p class="muted">Ahora mismo no hay referencias delicadas de stock.</p>
-          }
-        </div>
-      </article>
-          </section>
-        }
-
-        @if (analytics(); as report) {
-          <section class="admin-panel analytics-panel">
-      <div class="panel-title">
-        <h2>Mini analítica comercial</h2>
-        <div class="panel-title-actions">
-          <span>{{ report.startDate }} a {{ report.endDate }}</span>
-          <button type="button" class="secondary-button" (click)="setAnalyticsWindow(30)">
-            Últimos 30 días
-          </button>
-        </div>
+  <div class="admin-content">
+    <header class="admin-header">
+      <div>
+        <h1>{{ currentHeading() }}</h1>
+        <p>{{ currentView().caption }}</p>
       </div>
+      <span class="mode-pill">{{ modeLabel }}</span>
+    </header>
 
-      <form class="analytics-toolbar" [formGroup]="analyticsFiltersForm">
-        <label>
-          Desde
-          <input type="date" formControlName="startDate" />
-        </label>
+    @if (feedbackMessage(); as message) {
+      <p class="feedback success">{{ message }}</p>
+    }
 
-        <label>
-          Hasta
-          <input type="date" formControlName="endDate" />
-        </label>
-      </form>
+    @if (errorMessage(); as message) {
+      <p class="feedback error">{{ message }}</p>
+    }
 
-      <div class="analytics-summary-grid">
-        <article>
-          <span>Facturación</span>
-          <strong>{{ report.revenue | currency: 'EUR' : 'symbol' : '1.0-0' }}</strong>
-          <small>En el rango seleccionado</small>
-        </article>
-        <article>
-          <span>Pedidos</span>
-          <strong>{{ report.orders }}</strong>
-          <small>Sin incluir cancelados</small>
-        </article>
-        <article>
-          <span>Unidades</span>
-          <strong>{{ report.units }}</strong>
-          <small>Piezas vendidas</small>
-        </article>
-        <article>
-          <span>Clientas únicas</span>
-          <strong>{{ report.uniqueCustomers }}</strong>
-          <small>Actividad comercial</small>
-        </article>
-        <article>
-          <span>Ticket medio</span>
-          <strong>{{ report.averageTicket | currency: 'EUR' : 'symbol' : '1.0-0' }}</strong>
-          <small>Media del periodo</small>
-        </article>
-        <article>
-          <span>Colección top</span>
-          <strong>{{ report.topCollection || 'Sin datos' }}</strong>
-          <small>Mayor volumen facturado</small>
-        </article>
-        <article>
-          <span>Campaña top</span>
-          <strong>{{ report.topCampaign || 'Sin datos' }}</strong>
-          <small>Mayor volumen promocional</small>
-        </article>
-      </div>
-
-      <div class="analytics-breakdowns">
-        <section class="analytics-breakdown">
-          <div class="subsection-heading">
-            <h3>Colecciones</h3>
-            <small>Lectura por facturación y recurrencia</small>
+    @if (activeView() === 'orders') {
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <h2>Pedidos</h2>
+            <p>Seguimiento de fabricación, envío y entrega.</p>
           </div>
-
-          <div class="analytics-table">
-            <div class="analytics-table-head">
-              <span>Nombre</span>
-              <span>Facturación</span>
-              <span>Unidades</span>
-              <span>Pedidos</span>
-              <span>Clientas</span>
-              <span>Peso</span>
-            </div>
-
-            @for (row of report.collectionRows; track row.id) {
-              <div class="analytics-table-row">
-                <span>{{ row.label }}</span>
-                <span>{{ row.revenue | currency: 'EUR' : 'symbol' : '1.0-0' }}</span>
-                <span>{{ row.units }}</span>
-                <span>{{ row.orders }}</span>
-                <span>{{ row.customers }}</span>
-                <span>{{ row.share | percent: '1.0-0' }}</span>
-              </div>
-            } @empty {
-              <p class="muted">Aún no hay ventas suficientes para este rango.</p>
-            }
-          </div>
-        </section>
-
-        <section class="analytics-breakdown">
-          <div class="subsection-heading">
-            <h3>Campañas</h3>
-            <small>Solo líneas con promo aplicada</small>
-          </div>
-
-          <div class="analytics-table">
-            <div class="analytics-table-head">
-              <span>Campaña</span>
-              <span>Facturación</span>
-              <span>Unidades</span>
-              <span>Pedidos</span>
-              <span>Clientas</span>
-              <span>Ticket</span>
-            </div>
-
-            @for (row of report.campaignRows; track row.id) {
-              <div class="analytics-table-row">
-                <span>{{ row.label }}</span>
-                <span>{{ row.revenue | currency: 'EUR' : 'symbol' : '1.0-0' }}</span>
-                <span>{{ row.units }}</span>
-                <span>{{ row.orders }}</span>
-                <span>{{ row.customers }}</span>
-                <span>{{ row.averageOrderValue | currency: 'EUR' : 'symbol' : '1.0-0' }}</span>
-              </div>
-            } @empty {
-              <p class="muted">Todavía no hay ventas con campañas en este periodo.</p>
-            }
-          </div>
-        </section>
-      </div>
-          </section>
-        }
-      }
-
-      @if (activeWorkspace() === 'product') {
-        <div class="admin-layout">
-    <section class="admin-panel">
-      <div class="panel-title">
-        <h2>{{ editingProductId() ? 'Editar producto' : 'Nuevo producto' }}</h2>
-        <span>{{ modeLabel }}</span>
-      </div>
-
-      @if (loading$ | async) {
-        <p class="muted">Cargando catálogo desde Firestore...</p>
-      }
-
-      <form class="product-form" [formGroup]="productForm" (ngSubmit)="saveProduct()">
-        <label>
-          Nombre
-          <input type="text" formControlName="name" />
-          @if (productForm.controls.name.invalid && productForm.controls.name.touched) {
-            <small class="field-error">Escribe un nombre de al menos 2 caracteres.</small>
-          }
-        </label>
-
-        <label>
-          Categoría
-          <select formControlName="category">
-            @for (category of availableCategories$ | async; track category.slug) {
-              <option [value]="category.name">{{ category.name }}</option>
-            }
-          </select>
-          @if (productForm.controls.category.invalid && productForm.controls.category.touched) {
-            <small class="field-error">La categoría es obligatoria.</small>
-          }
-        </label>
-
-        <label>
-          Colección
-          <select formControlName="collection">
-            <option value="">Sin colección</option>
-            @for (collection of availableCollections$ | async; track collection.slug) {
-              <option [value]="collection.name">{{ collection.name }}</option>
-            }
-          </select>
-        </label>
-
-        <label>
-          Orden
-          <input type="number" min="0" step="1" formControlName="position" />
-          @if (productForm.controls.position.invalid && productForm.controls.position.touched) {
-            <small class="field-error">El orden debe ser 0 o superior.</small>
-          }
-        </label>
-
-        <label class="wide">
-          Descripción corta
-          <textarea rows="3" formControlName="description"></textarea>
-          @if (productForm.controls.description.invalid && productForm.controls.description.touched) {
-            <small class="field-error">Necesitamos una descripción corta para el catálogo.</small>
-          }
-        </label>
-
-        <label class="wide">
-          Historia / detalle
-          <textarea rows="3" formControlName="story"></textarea>
-        </label>
-
-        <label>
-          Precio
-          <input type="number" min="0" step="0.01" formControlName="originalPrice" />
-          @if (productForm.controls.originalPrice.invalid && productForm.controls.originalPrice.touched) {
-            <small class="field-error">Introduce un precio mayor que 0.</small>
-          }
-        </label>
-
-        <label>
-          Tipo de precio
-          <select formControlName="pricingMode" (change)="onPricingModeChange($any($event.target).value)">
-            @for (option of pricingOptions; track option.value) {
-              <option [value]="option.value">{{ option.label }}</option>
-            }
-          </select>
-        </label>
-
-        <label>
-          Stock
-          <input type="number" min="0" formControlName="stock" (input)="onStockChange($any($event.target).value)" />
-          @if (productForm.controls.stock.invalid && productForm.controls.stock.touched) {
-            <small class="field-error">El stock no puede ser negativo.</small>
-          }
-        </label>
-
-        <label>
-          Estado
-          <select formControlName="status" (change)="onStatusChange($any($event.target).value)">
-            @for (option of statusOptions; track option.value) {
-              <option [value]="option.value">{{ option.label }}</option>
-            }
-          </select>
-        </label>
-
-        @if (productForm.controls.pricingMode.value === 'individual_offer') {
-          <label>
-            Precio oferta
-            <input type="number" min="0" step="0.01" formControlName="offerPrice" />
-            @if (productForm.errors?.['invalidOffer']) {
-              <small class="field-error">El precio en oferta debe ser menor que el precio base.</small>
-            }
-          </label>
-        }
-
-        @if (productForm.controls.pricingMode.value === 'campaign') {
-          <label class="wide">
-            Campañas asignadas
-            <select formControlName="campaignIds" multiple size="4">
-              @for (campaign of campaigns$ | async; track trackCampaign(campaign)) {
-                <option [value]="campaign.id">{{ campaign.name }} - {{ getCampaignLifecycleLabel(campaign) }}</option>
+          <form class="toolbar" [formGroup]="orderFiltersForm">
+            <input type="search" formControlName="query" placeholder="Buscar pedido, cliente, DNI o producto" />
+            <select formControlName="status">
+              @for (status of orderStatusOptions; track status.value) {
+                <option [value]="status.value">{{ status.label }}</option>
               }
             </select>
-            <small class="upload-help">
-              Puedes vincular varias campañas al producto, pero no podrán solaparse en fechas.
-            </small>
-          </label>
-        }
+          </form>
+        </div>
 
-        <label class="wide upload-label">
-          Galería del producto
-          <input type="file" accept="image/*" multiple [disabled]="isUploadingImage()" (change)="uploadImage($event)" />
-          <small class="upload-help">
-            JPG, PNG o WebP. Máximo 4 MB por imagen. La primera foto será la portada del producto.
-          </small>
-        </label>
+        <div class="orders-list">
+          @for (order of filteredOrders$ | async; track order.id) {
+            <article class="order-card">
+              <div class="order-card-head">
+                <div>
+                  <strong>{{ order.id }}</strong>
+                  <small>{{ order.createdAt | date: 'dd/MM/yyyy HH:mm' }}</small>
+                </div>
+                <mark class="status-badge">{{ getOrderStatusLabel(order) }}</mark>
+              </div>
 
-        <div class="wide gallery-editor">
-          @if (galleryUrls().length) {
-            <div class="gallery-grid">
-              @for (imageUrl of galleryUrls(); track trackGalleryImage($index, imageUrl)) {
-                <article class="gallery-card">
-                  <img [src]="imageUrl" [alt]="productForm.controls.name.value || 'Imagen del producto'" />
-                  <div class="gallery-card-meta">
-                    <strong>{{ $index === 0 ? 'Portada' : 'Imagen ' + ($index + 1) }}</strong>
-                    <small>{{ $index === 0 ? 'Visible en catálogo' : 'Visible en detalle' }}</small>
-                  </div>
-                  <div class="row-actions">
-                    @if ($index !== 0) {
-                      <button type="button" class="secondary-button" (click)="setPrimaryImage($index)">Portada</button>
+              <div class="order-grid">
+                <div>
+                  <span>Cliente</span>
+                  <strong>{{ order.customer.name }}</strong>
+                  <small>{{ order.customer.email }} · {{ order.customer.phone }}</small>
+                </div>
+                <div>
+                  <span>DNI</span>
+                  <strong>{{ order.customer.dni }}</strong>
+                  <small>{{ order.customer.postalCode }} · {{ order.customer.city }}</small>
+                </div>
+                <div>
+                  <span>Dirección</span>
+                  <strong>{{ order.customer.addressLine1 }}</strong>
+                  <small>{{ order.customer.province }}</small>
+                </div>
+                <div>
+                  <span>Total</span>
+                  <strong>{{ order.total | currency: 'EUR' }}</strong>
+                  <small>
+                    {{ order.subtotal | currency: 'EUR' }}
+                    @if (order.discount) {
+                      · dto. {{ order.discount.amount | currency: 'EUR' }}
                     }
-                    <button type="button" class="secondary-button" [disabled]="$index === 0" (click)="moveGalleryImage($index, -1)">Subir</button>
-                    <button type="button" class="secondary-button" [disabled]="$index === galleryUrls().length - 1" (click)="moveGalleryImage($index, 1)">Bajar</button>
-                    <button type="button" class="danger-button" (click)="removeGalleryImage($index)">Quitar</button>
-                  </div>
-                </article>
-              }
-            </div>
-          } @else {
-            <p class="muted">Aún no has subido imágenes para este producto.</p>
-          }
-        </div>
-
-        @if (offerErrorMessage) {
-          <p class="form-error wide">{{ offerErrorMessage }}</p>
-        }
-
-        <label>
-          Tamaños / variantes
-          <input type="text" formControlName="sizes" />
-        </label>
-
-        <label>
-          Colores
-          <input type="text" formControlName="colors" />
-        </label>
-
-        <label class="checkbox-label wide">
-          <input type="checkbox" formControlName="featured" />
-          Mostrar en destacados
-        </label>
-
-        <div class="form-actions">
-          <button type="submit" [disabled]="isSavingProduct() || isUploadingImage()">
-            @if (isSavingProduct() || isUploadingImage()) {
-              <mat-spinner diameter="18"></mat-spinner>
-            }
-            {{ saveButtonLabel }}
-          </button>
-          @if (editingProductId()) {
-            <button
-              type="button"
-              class="secondary-button"
-              [disabled]="isSavingProduct() || isUploadingImage()"
-              (click)="resetForm()">
-              Cancelar
-            </button>
-          }
-        </div>
-      </form>
-    </section>
-
-    <aside class="admin-panel">
-      <div class="panel-title">
-        <h2>Vista previa</h2>
-        <span>Ficha rápida</span>
-      </div>
-
-      <article class="preview-card">
-        @if (previewImageUrl; as imageUrl) {
-          <img [src]="imageUrl" [alt]="productForm.controls.name.value || 'Vista previa del producto'" />
-        } @else {
-          <div class="preview-placeholder">Sin imagen</div>
-        }
-
-        @if (galleryUrls().length > 1) {
-          <div class="preview-gallery-strip">
-            @for (imageUrl of galleryUrls(); track trackGalleryImage($index, imageUrl)) {
-              <img [src]="imageUrl" [alt]="productForm.controls.name.value || 'Vista previa'" />
-            }
-          </div>
-        }
-
-        <div class="preview-copy">
-          <strong>{{ productForm.controls.name.value || 'Nombre del producto' }}</strong>
-          <span>
-            {{ productForm.controls.category.value || 'Categoría' }}
-            @if (productForm.controls.collection.value) {
-              - {{ productForm.controls.collection.value }}
-            }
-          </span>
-          <mark class="status-badge" [class.status-badge-muted]="previewStatus !== 'active'">
-            {{ getStatusLabel(previewStatus) }}
-          </mark>
-          <small class="pricing-mode">{{ getPricingLabel(productForm.controls.pricingMode.value) }}</small>
-          @if (previewCampaign; as campaignBadge) {
-            <mark class="campaign-badge">{{ campaignBadge }}</mark>
-          }
-          <p>{{ productForm.controls.description.value || 'La descripción del producto aparecerá aquí.' }}</p>
-          <b>{{ pricePreview | currency: 'EUR' }}</b>
-          @if (comparePricePreview; as comparePrice) {
-            <span class="compare-price">{{ comparePrice | currency: 'EUR' }}</span>
-          }
-        </div>
-      </article>
-
-      <div class="panel-title orders-title">
-        <h2>Pedidos activos</h2>
-        <span>Resumen rápido</span>
-      </div>
-      <div class="orders-list">
-        @for (order of pendingOrders$ | async; track order.id) {
-          <article class="order-card">
-            <div>
-              <strong>{{ order.customer.name }}</strong>
-              <span>{{ order.total | currency: 'EUR' }}</span>
-            </div>
-            <p>{{ getOrderStatus(order) }} - {{ getDeliveryMethodLabel(order.customer.deliveryMethod) }}</p>
-            <div class="order-card-actions">
-              <button type="button" class="secondary-button" (click)="viewCustomerFromOrder(order)">Ver clienta</button>
-              @if (getOrderPrimaryAction(order); as action) {
-                <button
-                  type="button"
-                  [disabled]="activeOrderActionId() === order.id"
-                  (click)="updateOrderStatus(order.id, action.status)">
-                  @if (activeOrderActionId() === order.id) {
-                    <mat-spinner diameter="16"></mat-spinner>
-                  }
-                  {{ activeOrderActionId() === order.id ? 'Actualizando...' : action.label }}
-                </button>
-              }
-            </div>
-          </article>
-        } @empty {
-          <p class="muted">No hay pedidos activos ahora mismo.</p>
-        }
-      </div>
-      <button
-        class="clear-orders-button"
-        type="button"
-        [disabled]="isClearingOrders()"
-        (click)="clearOrders()">
-        {{ isClearingOrders() ? 'Limpiando...' : 'Limpiar pedidos' }}
-      </button>
-    </aside>
-        </div>
-      }
-
-      @if (activeWorkspace() === 'customers') {
-        <section class="admin-panel customers-panel">
-    <div class="panel-title">
-      <h2>Clientes</h2>
-      <div class="panel-title-actions">
-        <span>{{ modeLabel }}</span>
-        <button
-          type="button"
-          class="secondary-button"
-          [disabled]="isSyncingCustomers()"
-          (click)="rebuildCustomers()">
-          @if (isSyncingCustomers()) {
-            <mat-spinner diameter="16"></mat-spinner>
-          }
-          {{ isSyncingCustomers() ? 'Sincronizando...' : 'Recalcular desde pedidos' }}
-        </button>
-      </div>
-    </div>
-
-    <form class="customers-toolbar" [formGroup]="customerFiltersForm">
-      <label>
-        Segmento
-        <select formControlName="segment">
-          @for (option of customerSegmentOptions; track option.value) {
-            <option [value]="option.value">{{ option.label }}</option>
-          }
-        </select>
-      </label>
-
-      <label class="wide">
-        Buscar
-        <input type="search" formControlName="query" placeholder="Nombre, email, teléfono o ciudad" />
-      </label>
-    </form>
-
-    @if (customersLoading$ | async) {
-      <p class="muted">Cargando base de clientas...</p>
-    } @else {
-      <div class="customers-overview">
-        <section class="customer-detail-shell">
-          @if (selectedCustomerDetail(); as detail) {
-            <div class="customer-detail-header">
-              <div>
-                <p class="eyebrow">Ficha de clienta</p>
-                <h3>{{ detail.customer.name }}</h3>
-                <p>{{ detail.customer.email }}</p>
-              </div>
-              <div class="customer-detail-actions">
-                @if (detail.customer.totalOrders > 1) {
-                  <mark class="campaign-badge">Recurrente</mark>
-                }
-                <button type="button" class="secondary-button" (click)="clearCustomerSelection()">
-                  Soltar foco
-                </button>
-              </div>
-            </div>
-
-            <div class="customer-detail-metrics">
-              <article>
-                <span>Valor cliente</span>
-                <strong>{{ detail.totalSpent | currency: 'EUR' }}</strong>
-              </article>
-              <article>
-                <span>Pedidos válidos</span>
-                <strong>{{ detail.validOrders }}</strong>
-              </article>
-              <article>
-                <span>Activos</span>
-                <strong>{{ detail.activeOrders }}</strong>
-              </article>
-              <article>
-                <span>Ticket medio</span>
-                <strong>{{ detail.averageTicket | currency: 'EUR' : 'symbol' : '1.0-0' }}</strong>
-              </article>
-            </div>
-
-            <div class="customer-detail-grid">
-              <div>
-                <span>Teléfono</span>
-                <strong>{{ detail.customer.phone || 'Sin teléfono' }}</strong>
-              </div>
-              <div>
-                <span>Zona</span>
-                <strong>{{ getCustomerLocation(detail.customer) }}</strong>
-              </div>
-              <div>
-                <span>Entrega favorita</span>
-                <strong>{{ getCustomerDeliveryPreferenceLabel(detail.customer) }}</strong>
-              </div>
-              <div>
-                <span>Último estado</span>
-                <strong>{{ detail.lastOrder ? getOrderStatus(detail.lastOrder) : 'Sin pedidos' }}</strong>
-              </div>
-              <div>
-                <span>Primera compra</span>
-                <strong>{{ detail.firstOrder ? (detail.firstOrder.createdAt | date: 'dd/MM/yyyy') : 'Sin pedidos' }}</strong>
-              </div>
-              <div>
-                <span>Última compra</span>
-                <strong>{{ detail.lastOrder ? (detail.lastOrder.createdAt | date: 'dd/MM/yyyy HH:mm') : 'Sin pedidos' }}</strong>
-              </div>
-            </div>
-
-            <div class="customer-detail-tags">
-              <span>Taxonomía top</span>
-              <strong>{{ detail.favouriteTaxonomy || 'Sin datos' }}</strong>
-              @for (collection of detail.topCollections; track collection) {
-                <mark class="status-badge status-badge-muted">{{ collection }}</mark>
-              }
-              @for (campaign of detail.campaignSignals; track campaign) {
-                <mark class="campaign-badge">{{ campaign }}</mark>
-              }
-            </div>
-
-            @if (detail.customer.notes) {
-              <p class="managed-order-notes">
-                <strong>Notas:</strong> {{ detail.customer.notes }}
-              </p>
-            }
-
-            <div class="customer-history">
-              <div class="subsection-heading">
-                <h3>Últimos pedidos</h3>
-                <small>{{ detail.orders.length }} en histórico</small>
-              </div>
-
-              @for (order of detail.orders.slice(0, 5); track order.id) {
-                <article class="customer-history-card">
-                  <div class="customer-history-head">
-                    <div>
-                      <strong>{{ order.id }}</strong>
-                      <small>{{ order.createdAt | date: 'dd/MM/yyyy HH:mm' }}</small>
-                    </div>
-                    <div class="customer-history-meta">
-                      <mark
-                        class="status-badge order-status-badge"
-                        [class.order-status-new]="order.status === 'new'"
-                        [class.order-status-confirmed]="order.status === 'confirmed'"
-                        [class.order-status-prepared]="order.status === 'prepared'"
-                        [class.order-status-completed]="order.status === 'completed'"
-                        [class.order-status-cancelled]="order.status === 'cancelled'">
-                        {{ getOrderStatus(order) }}
-                      </mark>
-                      <strong>{{ order.total | currency: 'EUR' }}</strong>
-                    </div>
-                  </div>
-                  <div class="managed-order-lines">
-                    @for (item of order.items; track item.productId + item.variant) {
-                      <span>{{ item.quantity }} x {{ item.productName }} - {{ getItemTaxonomy(item) }}</span>
-                    }
-                  </div>
-                  <div class="row-actions">
-                    <button type="button" class="secondary-button" (click)="focusOrder(order.id)">Ver en pedidos</button>
-                  </div>
-                </article>
-              } @empty {
-                <p class="muted">Todavía no hay pedidos para esta clienta.</p>
-              }
-            </div>
-          } @else {
-            <p class="muted">Selecciona una clienta para ver su ficha.</p>
-          }
-        </section>
-
-        <div class="customers-grid">
-          @for (customer of filteredCustomers$ | async; track customer.userId) {
-            <article class="customer-card" [class.customer-card-selected]="isSelectedCustomer(customer)">
-              <div class="customer-card-head">
-                <div>
-                  <strong>{{ customer.name }}</strong>
-                  <p>{{ customer.email }}</p>
+                  </small>
                 </div>
-                @if (customer.totalOrders > 1) {
-                  <mark class="campaign-badge">Recurrente</mark>
+              </div>
+
+              @if (order.customer.comments) {
+                <p class="order-notes"><strong>Comentario:</strong> {{ order.customer.comments }}</p>
+              }
+            <div class="order-lines">
+                @for (item of order.items; track item.productId + item.variant) {
+                  <div class="order-line">
+                    <span>{{ item.quantity }} x {{ item.productName }}</span>
+                    <small>{{ item.variant }} · {{ item.lineTotal | currency: 'EUR' }}</small>
+                  </div>
                 }
               </div>
 
-              <div class="customer-card-metrics">
-                <div>
-                  <span>Valor</span>
-                  <strong>{{ customer.totalSpent | currency: 'EUR' }}</strong>
-                </div>
-                <div>
-                  <span>Pedidos</span>
-                  <strong>{{ customer.totalOrders }}</strong>
-                </div>
-                <div>
-                  <span>Última compra</span>
-                  <strong>{{ customer.lastOrderAt ? (customer.lastOrderAt | date: 'dd/MM/yyyy') : 'Sin pedidos' }}</strong>
-                </div>
-                <div>
-                  <span>Zona</span>
-                  <strong>{{ getCustomerLocation(customer) }}</strong>
-                </div>
-              </div>
-
-              <div class="customer-card-meta">
-                <span>{{ customer.phone || 'Sin teléfono' }}</span>
-                <span>{{ getCustomerDeliveryPreferenceLabel(customer) }}</span>
-                @if (customer.lastOrderId) {
-                  <span>{{ customer.lastOrderId }}</span>
+              <div class="order-actions">
+                @for (action of getOrderProgressActions(order); track action.status) {
+                  <button
+                    type="button"
+                    class="button ghost"
+                    [disabled]="activeOrderActionId() === order.id"
+                    (click)="updateOrderStatus(order, action.status)">
+                    {{ action.label }}
+                  </button>
                 }
-              </div>
-
-              <div class="row-actions">
-                <button type="button" class="secondary-button" (click)="selectCustomer(customer.userId)">
-                  {{ isSelectedCustomer(customer) ? 'Ficha abierta' : 'Abrir ficha' }}
-                </button>
+                @if (canCancelOrder(order)) {
+                  <button
+                    type="button"
+                    class="button danger"
+                    [disabled]="activeOrderActionId() === order.id"
+                    (click)="updateOrderStatus(order, 'cancelled')">
+                    Cancelar
+                  </button>
+                }
               </div>
             </article>
           } @empty {
-            <p class="muted">Aún no hay clientas registradas para este filtro.</p>
+            <p class="empty-state">No hay pedidos que coincidan con el filtro actual.</p>
           }
         </div>
-      </div>
+      </section>
     }
-        </section>
-      }
 
-      @if (activeWorkspace() === 'orders') {
-        <section class="admin-panel orders-panel">
-    <div class="panel-title">
-      <h2>Pedidos</h2>
-      <span>{{ modeLabel }}</span>
-    </div>
-
-    <form class="orders-toolbar" [formGroup]="orderFiltersForm">
-      <label>
-        Estado
-        <select formControlName="status">
-          @for (option of orderStatusOptions; track option.value) {
-            <option [value]="option.value">{{ option.label }}</option>
-          }
-        </select>
-      </label>
-
-      <label>
-        Entrega
-        <select formControlName="deliveryMethod">
-          @for (option of deliveryMethodOptions; track option.value) {
-            <option [value]="option.value">{{ option.label }}</option>
-          }
-        </select>
-      </label>
-
-      <label class="wide">
-        Buscar
-        <input type="search" formControlName="query" placeholder="Pedido, clienta, ciudad o producto" />
-      </label>
-    </form>
-
-    <div class="managed-orders-grid">
-      @for (order of filteredOrders$ | async; track order.id) {
-        <article class="managed-order-card" [class.managed-order-card-selected]="belongsToSelectedCustomer(order)">
-          <div class="managed-order-head">
-            <div>
-              <strong>{{ order.customer.name }}</strong>
-              <span>{{ order.id }}</span>
-            </div>
-            <div class="managed-order-total">
-              <mark
-                class="status-badge order-status-badge"
-                [class.order-status-new]="order.status === 'new'"
-                [class.order-status-confirmed]="order.status === 'confirmed'"
-                [class.order-status-prepared]="order.status === 'prepared'"
-                [class.order-status-completed]="order.status === 'completed'"
-                [class.order-status-cancelled]="order.status === 'cancelled'">
-                {{ getOrderStatus(order) }}
-              </mark>
-              <strong>{{ order.total | currency: 'EUR' }}</strong>
-            </div>
+    @if (activeView() === 'catalog') {
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <h2>Catálogo</h2>
+            <p>Ordena, revisa stock y entra a editar cualquier referencia.</p>
           </div>
-
-          <div class="managed-order-grid">
-            <div>
-              <span>Entrega</span>
-              <strong>{{ getDeliveryMethodLabel(order.customer.deliveryMethod) }}</strong>
-            </div>
-            <div>
-              <span>Destino</span>
-              <strong>{{ getOrderDestination(order) }}</strong>
-            </div>
-            <div>
-              <span>Creado</span>
-              <strong>{{ order.createdAt | date: 'dd/MM/yyyy HH:mm' }}</strong>
-            </div>
-            <div>
-              <span>Actualizado</span>
-              <strong>{{ order.updatedAt | date: 'dd/MM/yyyy HH:mm' }}</strong>
-            </div>
-            <div>
-              <span>Contacto</span>
-              <strong>{{ order.customer.phone }}</strong>
-            </div>
-            <div>
-              <span>Líneas</span>
-              <strong>{{ order.items.length }}</strong>
-            </div>
-          </div>
-
-          <div class="managed-order-lines">
-            @for (item of order.items; track item.productId + item.variant) {
-              <span>{{ item.quantity }} x {{ item.productName }} ({{ item.variant }})</span>
-            }
-          </div>
-
-          @if (order.customer.notes) {
-            <p class="managed-order-notes">
-              <strong>Notas:</strong> {{ order.customer.notes }}
-            </p>
-          }
-
-          <div class="row-actions">
-            <button type="button" class="secondary-button" (click)="viewCustomerFromOrder(order)">Ver clienta</button>
-
-            @if (getOrderPrimaryAction(order); as action) {
-              <button
-                type="button"
-                [disabled]="activeOrderActionId() === order.id"
-                (click)="updateOrderStatus(order.id, action.status)">
-                @if (activeOrderActionId() === order.id) {
-                  <mat-spinner diameter="16"></mat-spinner>
-                }
-                {{ activeOrderActionId() === order.id ? 'Actualizando...' : action.label }}
-              </button>
-            }
-
-            @if (canCancelOrder(order)) {
-              <button
-                type="button"
-                class="secondary-button"
-                [disabled]="activeOrderActionId() === order.id"
-                (click)="updateOrderStatus(order.id, 'cancelled')">
-                Cancelar
-              </button>
-            }
-          </div>
-        </article>
-      } @empty {
-        <p class="muted">No hay pedidos que coincidan con el filtro actual.</p>
-      }
-    </div>
-        </section>
-      }
-
-      @if (activeWorkspace() === 'catalog') {
-        <section class="admin-panel catalog-panel">
-    <div class="panel-title">
-      <h2>Catálogo</h2>
-      <span>{{ modeLabel }}</span>
-    </div>
-
-    @if (loading$ | async) {
-      <p class="muted">Sincronizando productos...</p>
-    } @else {
-      <div class="product-table">
-        <div class="table-head">
-          <span>Producto</span>
-          <span>Orden</span>
-          <span>Taxonomía</span>
-          <span>Precio</span>
-          <span>Promo</span>
-          <span>Estado</span>
-          <span>Stock</span>
-          <span>Acciones</span>
+          <form class="toolbar" [formGroup]="catalogFiltersForm">
+            <input type="search" formControlName="query" placeholder="Buscar producto, estado o taxonomía" />
+          </form>
         </div>
-        @for (product of products$ | async; track product.id) {
-          <div class="table-row">
-            <span>{{ product.name }}</span>
-            <span>#{{ product.position }}</span>
-            <span>{{ getProductTaxonomy(product) }}</span>
-            <span>
-              {{ getProductPrice(product) | currency: 'EUR' }}
-              @if (getProductComparePrice(product); as comparePrice) {
-                <small class="compare-price">{{ comparePrice | currency: 'EUR' }}</small>
-              }
-            </span>
-            <span>
-              @if (getProductPricingBadge(product); as pricingBadge) {
-                <mark class="campaign-badge">{{ pricingBadge }}</mark>
-                @if (getAssignedCampaignCount(product) > 1) {
-                  <small class="muted">{{ getAssignedCampaignCount(product) }} campañas enlazadas</small>
-                }
-              } @else {
-                <small class="muted">Sin promo</small>
-              }
-            </span>
-            <span>
-              <mark class="status-badge" [class.status-badge-muted]="product.status !== 'active'">
-                {{ getStatusLabel(product.status) }}
-              </mark>
-            </span>
-            <span [class.warning]="product.status === 'active' && product.stock <= 4">{{ product.stock }}</span>
-            <span class="row-actions">
-              <button type="button" [disabled]="activeProductActionId() === product.id" (click)="editProduct(product)">
-                Editar
-              </button>
-              <button
-                type="button"
-                class="danger-button"
-                [disabled]="activeProductActionId() === product.id"
-                (click)="deleteProduct(product.id)">
-                {{ activeProductActionId() === product.id ? 'Borrando...' : 'Borrar' }}
-              </button>
-            </span>
-          </div>
-        }
-      </div>
-    }
-        </section>
-      }
 
-      @if (activeWorkspace() === 'taxonomy') {
-        <section class="admin-panel taxonomy-panel">
-    <div class="panel-title">
-      <h2>Categorías y colecciones</h2>
-      <div class="panel-title-actions">
-        <span>Taxonomía propia</span>
-        <button
-          type="button"
-          class="secondary-button"
-          [disabled]="isSyncingTaxonomies()"
-          (click)="syncTaxonomiesFromCatalog()">
-          @if (isSyncingTaxonomies()) {
-            <mat-spinner diameter="16"></mat-spinner>
-          }
-          {{ isSyncingTaxonomies() ? 'Sincronizando...' : 'Importar desde catálogo' }}
-        </button>
-      </div>
-    </div>
-
-    @if (taxonomySummaries$ | async; as taxonomy) {
-      <div class="taxonomy-layout">
-        <section class="taxonomy-column">
-          <div class="subsection-heading">
-            <h3>{{ editingCategoryId() ? 'Editar categoría' : 'Nueva categoría' }}</h3>
-            <small>{{ taxonomy.categories.length }} registradas</small>
+        <div class="catalog-table">
+          <div class="table-head">
+            <button type="button" class="table-head-button" (click)="toggleCatalogSort('name')">
+              Producto <small>{{ getCatalogSortLabel('name') }}</small>
+            </button>
+            <button type="button" class="table-head-button" (click)="toggleCatalogSort('position')">
+              Orden <small>{{ getCatalogSortLabel('position') }}</small>
+            </button>
+            <button type="button" class="table-head-button" (click)="toggleCatalogSort('taxonomy')">
+              Taxonomía <small>{{ getCatalogSortLabel('taxonomy') }}</small>
+            </button>
+            <button type="button" class="table-head-button" (click)="toggleCatalogSort('price')">
+              Precio <small>{{ getCatalogSortLabel('price') }}</small>
+            </button>
+            <button type="button" class="table-head-button" (click)="toggleCatalogSort('promo')">
+              Promo <small>{{ getCatalogSortLabel('promo') }}</small>
+            </button>
+            <button type="button" class="table-head-button" (click)="toggleCatalogSort('status')">
+              Estado <small>{{ getCatalogSortLabel('status') }}</small>
+            </button>
+            <button type="button" class="table-head-button" (click)="toggleCatalogSort('stock')">
+              Stock <small>{{ getCatalogSortLabel('stock') }}</small>
+            </button>
+            <span>Acciones</span>
           </div>
 
-          <form class="taxonomy-form" [formGroup]="categoryForm" (ngSubmit)="saveCategory()">
-            <label>
-              Nombre
-              <input type="text" formControlName="name" placeholder="Bolsos, Accesorios..." />
-              @if (categoryForm.controls.name.invalid && categoryForm.controls.name.touched) {
-                <small class="field-error">El nombre debe tener al menos 2 caracteres.</small>
-              }
-            </label>
-
-            <label>
-              Orden
-              <input type="number" min="0" step="1" formControlName="position" />
-              @if (categoryForm.controls.position.invalid && categoryForm.controls.position.touched) {
-                <small class="field-error">El orden debe ser 0 o superior.</small>
-              }
-            </label>
-
-            <div class="form-actions">
-              <button type="submit" [disabled]="isSavingCategory()">
-                @if (isSavingCategory()) {
-                  <mat-spinner diameter="18"></mat-spinner>
+          @for (product of filteredCatalogProducts$ | async; track product.id) {
+            <div class="table-row">
+              <span>{{ product.name }}</span>
+              <span>#{{ product.position }}</span>
+              <span>{{ getProductTaxonomy(product) }}</span>
+              <span>
+                {{ getProductPrice(product) | currency: 'EUR' }}
+                @if (getProductComparePrice(product); as comparePrice) {
+                  <small class="muted">{{ comparePrice | currency: 'EUR' }}</small>
                 }
-                {{ editingCategoryId() ? 'Guardar categoría' : 'Crear categoría' }}
-              </button>
-              @if (editingCategoryId()) {
-                <button type="button" class="secondary-button" (click)="resetCategoryForm()">Cancelar</button>
-              }
+              </span>
+              <span>
+                @if (getProductPricingBadge(product); as badge) {
+                  <mark class="status-badge">{{ badge }}</mark>
+                } @else {
+                  <small class="muted">Sin promo</small>
+                }
+              </span>
+              <span>{{ product.status }}</span>
+              <span>{{ product.stock }}</span>
+              <span class="row-actions">
+                <button type="button" class="button ghost" (click)="editProduct(product)">Editar</button>
+                <button
+                  type="button"
+                  class="button danger"
+                  [disabled]="activeProductActionId() === product.id"
+                  (click)="deleteProduct(product.id)">
+                  Borrar
+                </button>
+              </span>
             </div>
-          </form>
-
-          <div class="taxonomy-list">
-            @for (entry of taxonomy.categories; track entry.taxonomy.id) {
-              <article class="taxonomy-card">
-                <div>
-                  <strong>{{ entry.taxonomy.name }}</strong>
-                  <small>{{ entry.taxonomy.slug }}</small>
-                </div>
-                <div class="taxonomy-card-meta">
-                  <span>Orden {{ entry.taxonomy.position }}</span>
-                  <span>{{ entry.usageCount }} producto(s)</span>
-                </div>
-                <div class="row-actions">
-                  <button type="button" class="secondary-button" (click)="editCategory(entry.taxonomy)">
-                    Editar
-                  </button>
-                  <button
-                    type="button"
-                    class="danger-button"
-                    [disabled]="activeCategoryActionId() === entry.taxonomy.id"
-                    (click)="deleteCategory(entry)">
-                    @if (activeCategoryActionId() === entry.taxonomy.id) {
-                      <mat-spinner diameter="16"></mat-spinner>
-                    }
-                    {{ activeCategoryActionId() === entry.taxonomy.id ? 'Borrando...' : 'Borrar' }}
-                  </button>
-                </div>
-              </article>
-            } @empty {
-              <p class="muted">Todavía no hay categorías gestionadas. Impórtalas desde el catálogo o crea la primera.</p>
-            }
-          </div>
-        </section>
-
-        <section class="taxonomy-column">
-          <div class="subsection-heading">
-            <h3>{{ editingCollectionId() ? 'Editar colección' : 'Nueva colección' }}</h3>
-            <small>{{ taxonomy.collections.length }} registradas</small>
-          </div>
-
-          <form class="taxonomy-form" [formGroup]="collectionForm" (ngSubmit)="saveCollection()">
-            <label>
-              Nombre
-              <input type="text" formControlName="name" placeholder="Invitada, Diario..." />
-              @if (collectionForm.controls.name.invalid && collectionForm.controls.name.touched) {
-                <small class="field-error">El nombre debe tener al menos 2 caracteres.</small>
-              }
-            </label>
-
-            <label>
-              Orden
-              <input type="number" min="0" step="1" formControlName="position" />
-              @if (collectionForm.controls.position.invalid && collectionForm.controls.position.touched) {
-                <small class="field-error">El orden debe ser 0 o superior.</small>
-              }
-            </label>
-
-            <div class="form-actions">
-              <button type="submit" [disabled]="isSavingCollection()">
-                @if (isSavingCollection()) {
-                  <mat-spinner diameter="18"></mat-spinner>
-                }
-                {{ editingCollectionId() ? 'Guardar colección' : 'Crear colección' }}
-              </button>
-              @if (editingCollectionId()) {
-                <button type="button" class="secondary-button" (click)="resetCollectionForm()">Cancelar</button>
-              }
-            </div>
-          </form>
-
-          <div class="taxonomy-list">
-            @for (entry of taxonomy.collections; track entry.taxonomy.id) {
-              <article class="taxonomy-card">
-                <div>
-                  <strong>{{ entry.taxonomy.name }}</strong>
-                  <small>{{ entry.taxonomy.slug }}</small>
-                </div>
-                <div class="taxonomy-card-meta">
-                  <span>Orden {{ entry.taxonomy.position }}</span>
-                  <span>{{ entry.usageCount }} producto(s)</span>
-                </div>
-                <div class="row-actions">
-                  <button type="button" class="secondary-button" (click)="editCollection(entry.taxonomy)">
-                    Editar
-                  </button>
-                  <button
-                    type="button"
-                    class="danger-button"
-                    [disabled]="activeCollectionActionId() === entry.taxonomy.id"
-                    (click)="deleteCollection(entry)">
-                    @if (activeCollectionActionId() === entry.taxonomy.id) {
-                      <mat-spinner diameter="16"></mat-spinner>
-                    }
-                    {{ activeCollectionActionId() === entry.taxonomy.id ? 'Borrando...' : 'Borrar' }}
-                  </button>
-                </div>
-              </article>
-            } @empty {
-              <p class="muted">Todavía no hay colecciones gestionadas. Impórtalas desde el catálogo o crea la primera.</p>
-            }
-          </div>
-        </section>
-      </div>
-    }
-        </section>
-      }
-
-      @if (activeWorkspace() === 'campaigns') {
-        <section class="admin-panel campaigns-panel">
-    <div class="panel-title">
-      <h2>Campañas y promociones</h2>
-      <div class="campaign-header-actions">
-        <span>{{ modeLabel }}</span>
-        <button type="button" class="secondary-button" [disabled]="isResettingCampaigns()" (click)="resetCampaigns()">
-          @if (isResettingCampaigns()) {
-            <mat-spinner diameter="16"></mat-spinner>
+          } @empty {
+            <p class="empty-state">No hay productos con ese filtro.</p>
           }
-          {{ isResettingCampaigns() ? 'Restaurando...' : 'Restaurar demo' }}
-        </button>
-      </div>
-    </div>
+        </div>
+      </section>
+    }
 
-    <div class="campaigns-layout">
-      <section class="campaign-editor">
-        <h3>{{ editingCampaignId() ? 'Editar campaña' : 'Nueva campaña' }}</h3>
+    @if (activeView() === 'product') {
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <h2>{{ editingProductId() ? 'Editar producto' : 'Nuevo producto' }}</h2>
+            <p>Configura categoría, subcategoría, tallas, stock y promoción.</p>
+          </div>
+        </div>
 
-        <form class="campaign-form" [formGroup]="campaignForm" (ngSubmit)="saveCampaign()">
+        <form class="product-form" [formGroup]="productForm" (ngSubmit)="saveProduct()">
           <label>
             Nombre
             <input type="text" formControlName="name" />
-            @if (campaignForm.controls.name.invalid && campaignForm.controls.name.touched) {
-              <small class="field-error">El nombre debe tener al menos 2 caracteres.</small>
-            }
           </label>
 
           <label>
-            Badge corto
-            <input type="text" formControlName="badge" />
-            @if (campaignForm.controls.badge.invalid && campaignForm.controls.badge.touched) {
-              <small class="field-error">El badge debe tener al menos 2 caracteres.</small>
-            }
-          </label>
-
-          <label class="wide">
-            Descripción
-            <textarea rows="3" formControlName="description"></textarea>
-            @if (campaignForm.controls.description.invalid && campaignForm.controls.description.touched) {
-              <small class="field-error">Añade una descripción de al menos 8 caracteres.</small>
-            }
+            Categoría
+            <select formControlName="category">
+              @for (category of categories$ | async; track category.slug) {
+                <option [value]="category.name">{{ category.name }}</option>
+              }
+            </select>
           </label>
 
           <label>
-            Tipo de descuento
-            <select formControlName="discountType">
-              @for (option of discountTypeOptions; track option.value) {
+            Subcategoría
+            <input type="text" formControlName="subcategory" placeholder="Opcional" />
+          </label>
+
+          <label>
+            Colección
+            <select formControlName="collection">
+              <option value="">Sin colección</option>
+              @for (collection of collections$ | async; track collection.slug) {
+                <option [value]="collection.name">{{ collection.name }}</option>
+              }
+            </select>
+          </label>
+
+          <label>
+            Orden
+            <input type="number" formControlName="position" />
+          </label>
+
+          <label>
+            Precio base
+            <input type="number" formControlName="originalPrice" min="1" step="0.01" />
+          </label>
+
+          <label>
+            Modo de precio
+            <select formControlName="pricingMode">
+              @for (option of pricingOptions; track option.value) {
                 <option [value]="option.value">{{ option.label }}</option>
               }
             </select>
           </label>
 
           <label>
-            Valor
-            <input type="number" min="1" step="0.01" formControlName="discountValue" />
-            @if (campaignForm.controls.discountValue.invalid && campaignForm.controls.discountValue.touched) {
-              <small class="field-error">El valor del descuento debe ser mayor que 0.</small>
-            }
+            Oferta individual
+            <input type="number" formControlName="offerPrice" min="0" step="0.01" />
           </label>
 
-          <label>
-            Inicio
-            <input type="date" formControlName="startsAt" />
-          </label>
-
-          <label>
-            Fin
-            <input type="date" formControlName="endsAt" />
-          </label>
-
-          @if (campaignForm.errors?.['invalidDateRange']) {
-            <p class="form-error wide">La fecha de fin debe ser igual o posterior a la fecha de inicio.</p>
-          }
-
-          <label class="checkbox-label wide">
-            <input type="checkbox" formControlName="active" />
-            Campaña habilitada
-          </label>
-
-          <div class="form-actions">
-            <button type="submit" [disabled]="isSavingCampaign()">
-              @if (isSavingCampaign()) {
-                <mat-spinner diameter="18"></mat-spinner>
+          <label class="wide">
+            Campañas
+            <select formControlName="campaignIds" multiple>
+              @for (campaign of campaigns$ | async; track campaign.id) {
+                <option [value]="campaign.id">{{ campaign.name }}</option>
               }
-              {{ saveCampaignButtonLabel }}
+            </select>
+          </label>
+
+          <label>
+            Stock
+            <input type="number" formControlName="stock" min="0" />
+          </label>
+
+          <label>
+            Estado
+            <select formControlName="status">
+              @for (status of productStatusOptions; track status.value) {
+                <option [value]="status.value">{{ status.label }}</option>
+              }
+            </select>
+          </label>
+
+          <label class="wide">
+            Tallas
+            <input type="text" formControlName="sizes" placeholder="Ej. Única, S, M, L" />
+          </label>
+
+          <label class="wide">
+            Colores
+            <input type="text" formControlName="colors" placeholder="Ej. Coral, azul noche" />
+          </label>
+
+          <label class="wide">
+            Descripción
+            <textarea rows="3" formControlName="description"></textarea>
+          </label>
+
+          <label class="wide">
+            Historia / detalle artesanal
+            <textarea rows="4" formControlName="story"></textarea>
+          </label>
+
+          <label class="checkbox-row wide">
+            <input type="checkbox" formControlName="featured" />
+            Destacar en la Home
+          </label>
+
+          <div class="wide gallery-panel">
+            <div class="gallery-header">
+              <strong>Galería</strong>
+              <label class="button ghost upload-button">
+                {{ isUploadingImage() ? 'Subiendo...' : 'Subir imágenes' }}
+                <input type="file" accept="image/*" multiple (change)="uploadImages($event)" />
+              </label>
+            </div>
+
+            <div class="gallery-grid">
+              @for (image of galleryUrls(); track image; let index = $index) {
+                <article class="gallery-card">
+                  <img [src]="image" alt="" />
+                  <div class="gallery-actions">
+                    <button type="button" class="button ghost" (click)="setPrimaryImage(index)">Principal</button>
+                    <button type="button" class="button ghost" (click)="moveGalleryImage(index, -1)">↑</button>
+                    <button type="button" class="button ghost" (click)="moveGalleryImage(index, 1)">↓</button>
+                    <button type="button" class="button danger" (click)="removeGalleryImage(index)">Quitar</button>
+                  </div>
+                </article>
+              } @empty {
+                <p class="empty-state">Aún no hay imágenes para este producto.</p>
+              }
+            </div>
+          </div>
+
+          <div class="form-actions wide">
+            <button type="submit" class="button primary" [disabled]="isSavingProduct()">
+              {{ isSavingProduct() ? 'Guardando...' : 'Guardar producto' }}
             </button>
-            @if (editingCampaignId()) {
-              <button type="button" class="secondary-button" [disabled]="isSavingCampaign()" (click)="resetCampaignForm()">
-                Cancelar
-              </button>
-            }
+            <button type="button" class="button ghost" (click)="resetProductForm()">Limpiar</button>
           </div>
         </form>
       </section>
+    }
 
-      <section class="campaign-list-shell">
-        <h3>Campañas creadas</h3>
+    @if (activeView() === 'taxonomy') {
+      <section class="taxonomy-grid">
+        <article class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>Categorías</h2>
+              <p>Familias principales del catálogo.</p>
+            </div>
+          </div>
 
-        @if (campaignsLoading$ | async) {
-          <p class="muted">Cargando campañas...</p>
-        } @else {
-          <div class="campaign-list">
-            @for (entry of campaignSummaries$ | async; track entry.campaign.id) {
-              <article class="campaign-card">
-                <div class="campaign-card-head">
-                  <div>
-                    <strong>{{ entry.campaign.name }}</strong>
-                    <p>{{ entry.campaign.description }}</p>
-                  </div>
-                  <div class="campaign-meta">
-                    <mark class="campaign-badge">{{ entry.campaign.badge }}</mark>
-                    <mark class="lifecycle-badge {{ getCampaignLifecycleClass(entry.campaign) }}">
-                      {{ getCampaignLifecycleLabel(entry.campaign) }}
-                    </mark>
-                  </div>
+          <form class="mini-form" [formGroup]="categoryForm" (ngSubmit)="saveTaxonomy('category')">
+            <input type="text" formControlName="name" placeholder="Nombre" />
+            <input type="number" formControlName="position" placeholder="Orden" />
+            <div class="form-actions">
+              <button type="submit" class="button primary" [disabled]="isSavingCategory()">Guardar</button>
+              <button type="button" class="button ghost" (click)="resetTaxonomyForm('category')">Limpiar</button>
+            </div>
+          </form>
+
+          <div class="stack-list">
+            @for (item of managedCategories$ | async; track item.id) {
+              <div class="stack-row">
+                <div>
+                  <strong>{{ item.name }}</strong>
+                  <small>#{{ item.position }}</small>
                 </div>
-
-                <div class="campaign-stats">
-                  <span>
-                    {{ entry.campaign.discountType === 'percentage'
-                      ? entry.campaign.discountValue + '%'
-                      : (entry.campaign.discountValue | currency: 'EUR') }}
-                  </span>
-                  <span>{{ entry.usageCount }} producto(s)</span>
-                  <span>
-                    {{ entry.campaign.startsAt ? (entry.campaign.startsAt | date: 'dd/MM/yyyy') : 'Sin inicio' }}
-                    -
-                    {{ entry.campaign.endsAt ? (entry.campaign.endsAt | date: 'dd/MM/yyyy') : 'Sin fin' }}
-                  </span>
-                </div>
-
-                @if (entry.linkedProducts.length > 0) {
-                  <p class="muted">Aplica a: {{ entry.linkedProducts.join(', ') }}</p>
-                }
-
                 <div class="row-actions">
-                  <button type="button" [disabled]="activeCampaignActionId() === entry.campaign.id" (click)="editCampaign(entry.campaign)">
-                    Editar
-                  </button>
-                  <button
-                    type="button"
-                    class="danger-button"
-                    [disabled]="activeCampaignActionId() === entry.campaign.id"
-                    (click)="deleteCampaign(entry.campaign.id, entry.usageCount)">
-                    @if (activeCampaignActionId() === entry.campaign.id) {
-                      <mat-spinner diameter="16"></mat-spinner>
-                    }
-                    {{ activeCampaignActionId() === entry.campaign.id ? 'Borrando...' : 'Borrar' }}
-                  </button>
+                  <button type="button" class="button ghost" (click)="editTaxonomy('category', item)">Editar</button>
+                  <button type="button" class="button danger" (click)="deleteTaxonomy('category', item.id)">Borrar</button>
                 </div>
-              </article>
-            } @empty {
-              <p class="muted">Todavía no hay campañas creadas.</p>
+              </div>
             }
           </div>
-        }
+        </article>
+
+        <article class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>Subcategorías</h2>
+              <p>Nivel secundario para playa, bodas, casual y similares.</p>
+            </div>
+          </div>
+
+          <form class="mini-form" [formGroup]="subcategoryForm" (ngSubmit)="saveTaxonomy('subcategory')">
+            <input type="text" formControlName="name" placeholder="Nombre" />
+            <input type="number" formControlName="position" placeholder="Orden" />
+            <div class="form-actions">
+              <button type="submit" class="button primary" [disabled]="isSavingSubcategory()">Guardar</button>
+              <button type="button" class="button ghost" (click)="resetTaxonomyForm('subcategory')">Limpiar</button>
+            </div>
+          </form>
+
+          <div class="stack-list">
+            @for (item of managedSubcategories$ | async; track item.id) {
+              <div class="stack-row">
+                <div>
+                  <strong>{{ item.name }}</strong>
+                  <small>#{{ item.position }}</small>
+                </div>
+                <div class="row-actions">
+                  <button type="button" class="button ghost" (click)="editTaxonomy('subcategory', item)">Editar</button>
+                  <button type="button" class="button danger" (click)="deleteTaxonomy('subcategory', item.id)">Borrar</button>
+                </div>
+              </div>
+            }
+          </div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>Colecciones</h2>
+              <p>Grupos editoriales como temporada o regalo.</p>
+            </div>
+          </div>
+
+          <form class="mini-form" [formGroup]="collectionForm" (ngSubmit)="saveTaxonomy('collection')">
+            <input type="text" formControlName="name" placeholder="Nombre" />
+            <input type="number" formControlName="position" placeholder="Orden" />
+            <div class="form-actions">
+              <button type="submit" class="button primary" [disabled]="isSavingCollection()">Guardar</button>
+              <button type="button" class="button ghost" (click)="resetTaxonomyForm('collection')">Limpiar</button>
+            </div>
+          </form>
+
+          <div class="stack-list">
+            @for (item of managedCollections$ | async; track item.id) {
+              <div class="stack-row">
+                <div>
+                  <strong>{{ item.name }}</strong>
+                  <small>#{{ item.position }}</small>
+                </div>
+                <div class="row-actions">
+                  <button type="button" class="button ghost" (click)="editTaxonomy('collection', item)">Editar</button>
+                  <button type="button" class="button danger" (click)="deleteTaxonomy('collection', item.id)">Borrar</button>
+                </div>
+              </div>
+            }
+          </div>
+        </article>
       </section>
-    </div>
-        </section>
-      }
-    </div>
+    }
+
+    @if (activeView() === 'promotions') {
+      <section class="taxonomy-grid">
+        <article class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>Campañas</h2>
+              <p>Promociones visibles en producto, sin solaparlas sobre la misma pieza.</p>
+            </div>
+          </div>
+
+          <form class="mini-form vertical" [formGroup]="campaignForm" (ngSubmit)="saveCampaign()">
+            <input type="text" formControlName="name" placeholder="Nombre de campaña" />
+            <input type="text" formControlName="badge" placeholder="Badge corto" />
+            <textarea rows="3" formControlName="description" placeholder="Descripción"></textarea>
+            <select formControlName="discountType">
+              @for (option of campaignDiscountTypeOptions; track option.value) {
+                <option [value]="option.value">{{ option.label }}</option>
+              }
+            </select>
+            <input type="number" formControlName="discountValue" step="0.01" />
+            <div class="date-row">
+              <input type="date" formControlName="startsAt" />
+              <input type="date" formControlName="endsAt" />
+            </div>
+            <label class="checkbox-row">
+              <input type="checkbox" formControlName="active" />
+              Campaña activa
+            </label>
+            <div class="form-actions">
+              <button type="submit" class="button primary" [disabled]="isSavingCampaign()">Guardar</button>
+              <button type="button" class="button ghost" (click)="resetCampaignForm()">Limpiar</button>
+            </div>
+          </form>
+
+          <div class="stack-list">
+            @for (campaign of campaigns$ | async; track campaign.id) {
+              <div class="stack-row">
+                <div>
+                  <strong>{{ campaign.name }}</strong>
+                  <small>{{ getCampaignLifecycleLabel(campaign) }} · {{ campaign.badge }}</small>
+                </div>
+                <div class="row-actions">
+                  <button type="button" class="button ghost" (click)="editCampaign(campaign)">Editar</button>
+                  <button type="button" class="button danger" [disabled]="activeCampaignActionId() === campaign.id" (click)="deleteCampaign(campaign.id)">Borrar</button>
+                </div>
+              </div>
+            }
+          </div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>Códigos de descuento</h2>
+              <p>Aplicables a todo el catálogo o a productos concretos.</p>
+            </div>
+          </div>
+
+          <form class="mini-form vertical" [formGroup]="discountCodeForm" (ngSubmit)="saveDiscountCode()">
+            <input type="text" formControlName="code" placeholder="Ej. MARTURA10" />
+            <textarea rows="3" formControlName="description" placeholder="Descripción visible"></textarea>
+            <div class="date-row">
+              <select formControlName="type">
+                @for (option of discountCodeTypeOptions; track option.value) {
+                  <option [value]="option.value">{{ option.label }}</option>
+                }
+              </select>
+              <input type="number" formControlName="value" step="0.01" />
+            </div>
+            <select formControlName="scope">
+              @for (option of discountCodeScopeOptions; track option.value) {
+                <option [value]="option.value">{{ option.label }}</option>
+              }
+            </select>
+            <select formControlName="productIds" multiple>
+              @for (product of products$ | async; track product.id) {
+                <option [value]="product.id">{{ product.name }}</option>
+              }
+            </select>
+            <div class="date-row">
+              <input type="date" formControlName="startsAt" />
+              <input type="date" formControlName="endsAt" />
+            </div>
+            <label class="checkbox-row">
+              <input type="checkbox" formControlName="active" />
+              Código activo
+            </label>
+            <div class="form-actions">
+              <button type="submit" class="button primary" [disabled]="isSavingDiscountCode()">Guardar</button>
+              <button type="button" class="button ghost" (click)="resetDiscountCodeForm()">Limpiar</button>
+            </div>
+          </form>
+
+          <div class="stack-list">
+            @for (discountCode of discountCodes$ | async; track discountCode.id) {
+              <div class="stack-row">
+                <div>
+                  <strong>{{ discountCode.code }}</strong>
+                  <small>{{ discountCode.description }}</small>
+                </div>
+                <div class="row-actions">
+                  <button type="button" class="button ghost" (click)="editDiscountCode(discountCode)">Editar</button>
+                  <button type="button" class="button danger" [disabled]="activeDiscountCodeActionId() === discountCode.id" (click)="deleteDiscountCode(discountCode.id)">Borrar</button>
+                </div>
+              </div>
+            }
+          </div>
+        </article>
+      </section>
+    }
+
+    @if (activeView() === 'settings') {
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <h2>Ajustes generales</h2>
+            <p>Bizum, envío, ficha “Sobre mí”, correo de consultas y carrusel principal.</p>
+          </div>
+        </div>
+
+        <form class="product-form" [formGroup]="settingsForm" (ngSubmit)="saveSettings()">
+          <label>
+            Teléfono Bizum
+            <input type="text" formControlName="bizumPhone" />
+          </label>
+
+          <label>
+            Precio de envío
+            <input type="number" formControlName="shippingPrice" step="0.01" min="0" />
+          </label>
+
+          <label class="wide">
+            Correo de consultas
+            <input type="email" formControlName="contactEmail" />
+          </label>
+
+          <label class="wide">
+            Título “Sobre mí”
+            <input type="text" formControlName="aboutTitle" />
+          </label>
+
+          <label class="wide">
+            Texto “Sobre mí”
+            <textarea rows="5" formControlName="aboutBody"></textarea>
+          </label>
+
+          <div class="wide hero-settings-grid">
+            <article class="hero-settings-card">
+              <h3>Slide 1</h3>
+              <input type="text" formControlName="hero1ImageUrl" placeholder="URL o asset de imagen" />
+              <input type="text" formControlName="hero1Headline" placeholder="Titular" />
+              <textarea rows="3" formControlName="hero1Caption" placeholder="Texto al pie"></textarea>
+              <label class="checkbox-row">
+                <input type="checkbox" formControlName="hero1Active" />
+                Activo
+              </label>
+            </article>
+            <article class="hero-settings-card">
+              <h3>Slide 2</h3>
+              <input type="text" formControlName="hero2ImageUrl" placeholder="URL o asset de imagen" />
+              <input type="text" formControlName="hero2Headline" placeholder="Titular" />
+              <textarea rows="3" formControlName="hero2Caption" placeholder="Texto al pie"></textarea>
+              <label class="checkbox-row">
+                <input type="checkbox" formControlName="hero2Active" />
+                Activo
+              </label>
+            </article>
+            <article class="hero-settings-card">
+              <h3>Slide 3</h3>
+              <input type="text" formControlName="hero3ImageUrl" placeholder="URL o asset de imagen" />
+              <input type="text" formControlName="hero3Headline" placeholder="Titular" />
+              <textarea rows="3" formControlName="hero3Caption" placeholder="Texto al pie"></textarea>
+              <label class="checkbox-row">
+                <input type="checkbox" formControlName="hero3Active" />
+                Activo
+              </label>
+            </article>
+          </div>
+
+          <div class="form-actions wide">
+            <button type="submit" class="button primary" [disabled]="isSavingSettings()">
+              {{ isSavingSettings() ? 'Guardando...' : 'Guardar ajustes' }}
+            </button>
+          </div>
+        </form>
+      </section>
+    }
   </div>
 </section>
-

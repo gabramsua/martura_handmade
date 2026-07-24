@@ -2,24 +2,33 @@ import { Injectable, inject } from '@angular/core';
 import { FirebaseError } from 'firebase/app';
 
 import { CartSummary } from '../models/cart.model';
-import { CreateOrderPayload, CustomerContact, SerializedCheckoutOrder } from '../models/order.model';
+import {
+  cartItemToOrderItem,
+  CreateOrderPayload,
+  CustomerContact,
+  SerializedCheckoutOrder,
+} from '../models/order.model';
 import { isFirebaseConfigured } from '../firebase/firebase.config';
 import { getMarturaFunctions } from '../firebase/firebase.lazy';
 import { reviveOrder } from '../firebase/firestore.mappers';
+import { CampaignsService } from './campaigns.service';
 import { CheckoutService } from './checkout.service';
+import { DiscountCodesService } from './discount-codes.service';
 import { OrdersService } from './orders.service';
 import { ProductsService } from './products.service';
 
 @Injectable({ providedIn: 'root' })
 export class OrderPlacementService {
+  private readonly campaignsService = inject(CampaignsService);
   private readonly checkoutService = inject(CheckoutService);
+  private readonly discountCodesService = inject(DiscountCodesService);
   private readonly ordersService = inject(OrdersService);
   private readonly productsService = inject(ProductsService);
 
   async placeOrder(
     summary: CartSummary,
     customer: CustomerContact,
-    userId: string,
+    discountCode: string | null,
   ) {
     if (isFirebaseConfigured) {
       const functions = await getMarturaFunctions();
@@ -28,10 +37,24 @@ export class OrderPlacementService {
         throw new Error('Firebase Functions no está disponible en la app. Revisa la configuración.');
       }
 
-      return this.placeOrderWithFunction(functions, customer, summary);
+      return this.placeOrderWithFunction(functions, customer, summary, discountCode);
     }
 
-    const order = this.checkoutService.buildOrder(summary, customer, userId);
+    const items = summary.items.map((item) =>
+      cartItemToOrderItem(item, this.campaignsService.activeCampaignsSnapshot),
+    );
+    const resolvedDiscount = this.discountCodesService.resolveDiscount(discountCode, items);
+    const order = this.checkoutService.buildOrder(
+      summary,
+      customer,
+      resolvedDiscount
+        ? {
+            code: resolvedDiscount.code.code,
+            description: resolvedDiscount.code.description,
+            amount: resolvedDiscount.amount,
+          }
+        : null,
+    );
 
     const stockValidation = this.productsService.validateCartItems(summary.items);
 
@@ -49,6 +72,7 @@ export class OrderPlacementService {
     functions: NonNullable<Awaited<ReturnType<typeof getMarturaFunctions>>>,
     customer: CustomerContact,
     summary: CartSummary,
+    discountCode: string | null,
   ) {
     try {
       const { httpsCallable } = await import('firebase/functions');
@@ -63,6 +87,7 @@ export class OrderPlacementService {
           quantity: item.quantity,
           variant: item.variant,
         })),
+        discountCode: discountCode?.trim().toUpperCase() || null,
       });
 
       return reviveOrder(result.data);
@@ -84,10 +109,6 @@ export class OrderPlacementService {
         : null;
 
     switch (code) {
-      case 'functions/unauthenticated':
-        return new Error('Debes iniciar sesión para cerrar el pedido.');
-      case 'functions/permission-denied':
-        return new Error('No hemos podido validar tus permisos para crear el pedido. Cierra sesión y vuelve a entrar.');
       case 'functions/failed-precondition':
       case 'functions/not-found':
       case 'functions/invalid-argument':

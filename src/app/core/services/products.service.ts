@@ -42,6 +42,7 @@ import { TaxonomiesService } from './taxonomies.service';
 
 const INITIAL_FILTERS: ProductFilters = {
   categorySlug: null,
+  subcategorySlug: null,
   collectionSlug: null,
   query: '',
   onlyOffers: false,
@@ -76,6 +77,22 @@ export class ProductsService {
           slug: product.categorySlug,
           name: product.category,
         })),
+      ),
+    ),
+  );
+  readonly subcategories$ = combineLatest([this.taxonomiesService.subcategories$, this.products$]).pipe(
+    map(([taxonomies, products]) =>
+      this.mergeCatalogTaxonomies(
+        taxonomies,
+        this.getPublicCatalogProducts(products)
+          .filter(
+            (product): product is Product & { subcategory: string; subcategorySlug: string } =>
+              !!product.subcategorySlug && !!product.subcategory,
+          )
+          .map((product) => ({
+            slug: product.subcategorySlug,
+            name: product.subcategory,
+          })),
       ),
     ),
   );
@@ -260,7 +277,11 @@ export class ProductsService {
     nextValue: { name: string; slug: string },
   ): Promise<void> {
     const impactedProducts = this.productsSubject.value.filter((product) =>
-      type === 'category' ? product.categorySlug === previousSlug : product.collectionSlug === previousSlug,
+      type === 'category'
+        ? product.categorySlug === previousSlug
+        : type === 'subcategory'
+          ? product.subcategorySlug === previousSlug
+          : product.collectionSlug === previousSlug,
     );
 
     if (!impactedProducts.length) {
@@ -270,6 +291,8 @@ export class ProductsService {
     const nextProducts = this.productsSubject.value.map((product) => {
       const matchesTaxonomy = type === 'category'
         ? product.categorySlug === previousSlug
+        : type === 'subcategory'
+          ? product.subcategorySlug === previousSlug
         : product.collectionSlug === previousSlug;
 
       if (!matchesTaxonomy) {
@@ -282,6 +305,12 @@ export class ProductsService {
             category: nextValue.name,
             categorySlug: nextValue.slug,
           }
+        : type === 'subcategory'
+          ? {
+              ...product,
+              subcategory: nextValue.name,
+              subcategorySlug: nextValue.slug,
+            }
         : {
             ...product,
             collection: nextValue.name,
@@ -295,6 +324,8 @@ export class ProductsService {
       for (const product of nextProducts) {
         const matchesTaxonomy = type === 'category'
           ? product.categorySlug === nextValue.slug
+          : type === 'subcategory'
+            ? product.subcategorySlug === nextValue.slug
           : product.collectionSlug === nextValue.slug;
 
         if (!matchesTaxonomy) {
@@ -441,6 +472,7 @@ export class ProductsService {
     return this.sortProducts(
       products.filter((product) => {
         const matchesCategory = !filters.categorySlug || product.categorySlug === filters.categorySlug;
+        const matchesSubcategory = !filters.subcategorySlug || product.subcategorySlug === filters.subcategorySlug;
         const matchesCollection =
           !filters.collectionSlug || product.collectionSlug === filters.collectionSlug;
         const matchesOffer =
@@ -453,7 +485,7 @@ export class ProductsService {
           product.category.toLowerCase().includes(query) ||
           (product.collection ?? '').toLowerCase().includes(query);
 
-        return matchesCategory && matchesCollection && matchesOffer && matchesQuery;
+        return matchesCategory && matchesSubcategory && matchesCollection && matchesOffer && matchesQuery;
       }),
       filters.sortBy,
     );
@@ -478,6 +510,8 @@ export class ProductsService {
       gallery,
       category: draft.category,
       categorySlug: draft.categorySlug || slugify(draft.category),
+      subcategory: draft.subcategory,
+      subcategorySlug: draft.subcategory ? (draft.subcategorySlug || slugify(draft.subcategory)) : null,
       collection: draft.collection,
       collectionSlug: draft.collectionSlug,
       stock: draft.stock,

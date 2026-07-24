@@ -4,43 +4,37 @@ import { BehaviorSubject, combineLatest, map } from 'rxjs';
 import { CartItem, CartSummary } from '../models/cart.model';
 import { isProductAvailable, Product } from '../models/product.model';
 import { reviveProduct } from '../firebase/firestore.mappers';
-import { AppUser } from '../models/user.model';
 import { resolveProductPricing } from '../utils/product-pricing';
-import { AuthService } from './auth.service';
 import { CampaignsService } from './campaigns.service';
 import { LocalStorageService } from './local-storage.service';
+import { ShopSettingsService } from './shop-settings.service';
 
-const SHIPPING_PRICE = 4.95;
+const CART_STORAGE_KEY = 'martura_cart_guest';
 const LEGACY_CART_STORAGE_KEY = 'martura_cart';
-const GUEST_CART_STORAGE_KEY = 'martura_cart_guest';
 
 @Injectable({ providedIn: 'root' })
 export class CartService {
-  private readonly authService = inject(AuthService);
   private readonly campaignsService = inject(CampaignsService);
   private readonly localStorageService = inject(LocalStorageService);
-  private currentStorageKey = GUEST_CART_STORAGE_KEY;
-  private readonly itemsSubject = new BehaviorSubject<CartItem[]>(
-    this.readItems(this.currentStorageKey),
-  );
+  private readonly shopSettingsService = inject(ShopSettingsService);
+  private readonly itemsSubject = new BehaviorSubject<CartItem[]>(this.readItems());
 
   readonly items$ = this.itemsSubject.asObservable();
-  readonly summary$ = combineLatest([this.items$, this.campaignsService.activeCampaigns$]).pipe(
+  readonly summary$ = combineLatest([
+    this.items$,
+    this.campaignsService.activeCampaigns$,
+    this.shopSettingsService.settings$,
+  ]).pipe(
     map(([items]) => this.buildSummary(items)),
   );
   readonly totalItems$ = this.summary$.pipe(map((summary) => summary.totalItems));
 
   constructor() {
     this.migrateLegacyCartIfNeeded();
-    this.itemsSubject.next(this.readItems(this.currentStorageKey));
-    this.syncWithSession(this.authService.currentUser);
-
-    this.authService.user$.subscribe((user) => {
-      this.syncWithSession(user);
-    });
+    this.itemsSubject.next(this.readItems());
   }
 
-  addItem(product: Product, variant: string = product.sizes[0], quantity = 1): void {
+  addItem(product: Product, variant: string = product.sizes[0] ?? 'Única', quantity = 1): void {
     if (!isProductAvailable(product) || quantity <= 0) {
       return;
     }
@@ -49,10 +43,7 @@ export class CartService {
     const existingItem = currentItems.find(
       (item) => item.product.id === product.id && item.variant === variant,
     );
-    const nextQuantity = Math.min(
-      product.stock,
-      (existingItem?.quantity ?? 0) + quantity,
-    );
+    const nextQuantity = Math.min(product.stock, (existingItem?.quantity ?? 0) + quantity);
 
     if (existingItem) {
       this.setItems(
@@ -111,56 +102,24 @@ export class CartService {
       ).effectivePrice;
       return total + price * item.quantity;
     }, 0);
-    const shipping = subtotal > 0 && subtotal < 75 ? SHIPPING_PRICE : 0;
+    const shipping = subtotal > 0 ? this.shopSettingsService.settingsSnapshot.shippingPrice : 0;
 
     return {
       items,
-      subtotal,
-      shipping,
-      total: subtotal + shipping,
+      subtotal: normalizeMoney(subtotal),
+      shipping: normalizeMoney(shipping),
+      total: normalizeMoney(subtotal + shipping),
       totalItems: items.reduce((total, item) => total + item.quantity, 0),
     };
   }
 
   private setItems(items: CartItem[]): void {
     this.itemsSubject.next(items);
-    this.localStorageService.write(this.currentStorageKey, items);
+    this.localStorageService.write(CART_STORAGE_KEY, items);
   }
 
-  private syncWithSession(user: AppUser | null): void {
-    const nextStorageKey = this.getStorageKey(user);
-
-    if (nextStorageKey === this.currentStorageKey) {
-      return;
-    }
-
-    const previousStorageKey = this.currentStorageKey;
-    const previousItems = this.itemsSubject.value;
-    const nextItems = this.readItems(nextStorageKey);
-
-    this.currentStorageKey = nextStorageKey;
-
-    if (previousStorageKey === GUEST_CART_STORAGE_KEY && user) {
-      const mergedItems = this.mergeItems(nextItems, previousItems);
-      this.itemsSubject.next(mergedItems);
-      this.localStorageService.write(this.currentStorageKey, mergedItems);
-
-      if (previousItems.length > 0) {
-        this.localStorageService.remove(GUEST_CART_STORAGE_KEY);
-      }
-
-      return;
-    }
-
-    this.itemsSubject.next(nextItems);
-  }
-
-  private getStorageKey(user: AppUser | null): string {
-    return user ? `martura_cart_${user.id}` : GUEST_CART_STORAGE_KEY;
-  }
-
-  private readItems(storageKey: string): CartItem[] {
-    return this.localStorageService.read(storageKey, [], this.reviveItems);
+  private readItems(): CartItem[] {
+    return this.localStorageService.read(CART_STORAGE_KEY, [], this.reviveItems);
   }
 
   private migrateLegacyCartIfNeeded(): void {
@@ -174,37 +133,13 @@ export class CartService {
       return;
     }
 
-    const guestItems = this.readItems(GUEST_CART_STORAGE_KEY);
+    const currentItems = this.readItems();
 
-    if (guestItems.length === 0) {
-      this.localStorageService.write(GUEST_CART_STORAGE_KEY, legacyItems);
+    if (currentItems.length === 0) {
+      this.localStorageService.write(CART_STORAGE_KEY, legacyItems);
     }
 
     this.localStorageService.remove(LEGACY_CART_STORAGE_KEY);
-  }
-
-  private mergeItems(baseItems: CartItem[], incomingItems: CartItem[]): CartItem[] {
-    const merged = [...baseItems];
-
-    for (const incomingItem of incomingItems) {
-      const existingItem = merged.find(
-        (item) =>
-          item.product.id === incomingItem.product.id &&
-          item.variant === incomingItem.variant,
-      );
-
-      if (!existingItem) {
-        merged.push(incomingItem);
-        continue;
-      }
-
-      existingItem.quantity = Math.min(
-        existingItem.product.stock,
-        existingItem.quantity + incomingItem.quantity,
-      );
-    }
-
-    return merged;
   }
 
   private reviveItems(items: CartItem[]): CartItem[] {
@@ -213,4 +148,8 @@ export class CartService {
       product: reviveProduct(item.product as Product & { createdAt: unknown }),
     }));
   }
+}
+
+function normalizeMoney(value: number): number {
+  return Math.round(value * 100) / 100;
 }
