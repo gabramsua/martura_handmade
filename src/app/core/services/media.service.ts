@@ -7,28 +7,11 @@ import { slugify } from '../utils/slug';
 @Injectable({ providedIn: 'root' })
 export class MediaService {
   async uploadProductImage(file: File): Promise<string> {
-    const storage = await getMarturaStorage();
+    return this.uploadImage(file, 'products', 'producto');
+  }
 
-    if (!isFirebaseConfigured || !storage) {
-      throw new Error('Firebase Storage no está disponible en este entorno.');
-    }
-
-    if (!file.type.startsWith('image/')) {
-      throw new Error('El archivo seleccionado no es una imagen válida.');
-    }
-
-    const { getDownloadURL, ref, uploadBytes } = await import('firebase/storage');
-    const extension = this.resolveExtension(file);
-    const safeName = slugify(file.name.replace(/\.[^.]+$/, '')) || 'producto';
-    const objectPath = `products/${Date.now()}-${safeName}.${extension}`;
-    const storageRef = ref(storage, objectPath);
-
-    await uploadBytes(storageRef, file, {
-      contentType: file.type,
-      cacheControl: 'public,max-age=3600',
-    });
-
-    return getDownloadURL(storageRef);
+  async uploadHeroSlideImage(file: File): Promise<string> {
+    return this.uploadImage(file, 'hero-slides', 'slide');
   }
 
   async deleteProductImages(urls: string[]): Promise<void> {
@@ -54,6 +37,35 @@ export class MediaService {
     });
 
     await Promise.allSettled(deletions);
+  }
+
+  private async uploadImage(
+    file: File,
+    folder: 'hero-slides' | 'products',
+    fallbackName: string,
+  ): Promise<string> {
+    const storage = await getMarturaStorage();
+
+    if (!isFirebaseConfigured || !storage) {
+      throw new Error('Firebase Storage no está disponible en este entorno.');
+    }
+
+    if (!file.type.startsWith('image/')) {
+      throw new Error('El archivo seleccionado no es una imagen válida.');
+    }
+
+    const { getDownloadURL, ref, uploadBytes } = await import('firebase/storage');
+    const extension = this.resolveExtension(file);
+    const safeName = slugify(file.name.replace(/\.[^.]+$/, '')) || fallbackName;
+    const objectPath = `${folder}/${Date.now()}-${safeName}.${extension}`;
+    const storageRef = ref(storage, objectPath);
+
+    await uploadBytes(storageRef, file, {
+      contentType: file.type,
+      cacheControl: 'public,max-age=3600',
+    });
+
+    return getDownloadURL(storageRef);
   }
 
   private resolveExtension(file: File): string {

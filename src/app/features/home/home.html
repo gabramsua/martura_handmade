@@ -1,42 +1,66 @@
-@if (currentHeroSlide(); as heroSlide) {
-  <section class="hero" [style.background-image]="'linear-gradient(rgba(28, 24, 21, 0.28), rgba(28, 24, 21, 0.42)), url(' + heroSlide.imageUrl + ')'">
-    <div class="hero-copy">
-      <p class="eyebrow">Martura Handmade</p>
-      <h1>{{ heroSlide.headline }}</h1>
-      <p class="hero-intro">{{ heroSlide.caption }}</p>
-
-      <div class="hero-actions">
-        <a class="button primary" routerLink="/" fragment="catalogo">Ver catálogo</a>
-        <a class="button ghost" routerLink="/consultas">Hacer una consulta</a>
-      </div>
-    </div>
-
-    @if (heroSlides(); as slides) {
-      @if (slides.length > 1) {
-        <div class="hero-controls">
-          <button type="button" class="hero-control" (click)="previousHero()">‹</button>
-          <button type="button" class="hero-control" (click)="nextHero()">›</button>
+@if (heroSlides(); as slides) {
+  @if (slides.length) {
+    <section class="hero-shell">
+      <div class="carousel">
+        <div class="carousel-inner">
+          @for (slide of slides; track slide.id; let index = $index) {
+            <article class="carousel-item" [class.active]="isCurrentSlide(index)">
+              <img [src]="slide.imageUrl" [alt]="slide.headline" />
+              <div class="carousel-overlay"></div>
+              <div class="carousel-caption">
+                <p class="eyebrow">Martura Handmade</p>
+                <h1>{{ slide.headline }}</h1>
+                <p>{{ slide.caption }}</p>
+                <div class="hero-actions">
+                  <a class="button primary" routerLink="/catalogo">Ver catálogo</a>
+                  <a class="button ghost" routerLink="/consultas">Hacer una consulta</a>
+                </div>
+              </div>
+            </article>
+          }
         </div>
-      }
-    }
-  </section>
+
+        @if (slides.length > 1) {
+          <div class="carousel-indicators" aria-label="Seleccionar diapositiva">
+            @for (slide of slides; track slide.id; let index = $index) {
+              <button
+                type="button"
+                class="carousel-indicator"
+                [class.active]="isCurrentSlide(index)"
+                [attr.aria-label]="'Ir a la diapositiva ' + (index + 1)"
+                [attr.aria-current]="isCurrentSlide(index) ? 'true' : null"
+                (click)="goToSlide(index)"
+              ></button>
+            }
+          </div>
+
+          <button type="button" class="carousel-control carousel-control-prev" aria-label="Anterior" (click)="previousHero()">
+            <span aria-hidden="true"></span>
+          </button>
+          <button type="button" class="carousel-control carousel-control-next" aria-label="Siguiente" (click)="nextHero()">
+            <span aria-hidden="true"></span>
+          </button>
+        }
+      </div>
+    </section>
+  }
 }
 
 <section class="service-strip">
   <article>
     <span>Pago</span>
     <strong>Bizum confirmado</strong>
-    <p>El checkout deja el pedido registrado y muestra al instante el número Bizum al que hacer el pago.</p>
+    <p>Al cerrar el pedido se muestran al instante los datos de pago y el siguiente paso.</p>
   </article>
   <article>
     <span>Encargos</span>
     <strong>Consulta cambios y combinaciones</strong>
-    <p>El catálogo es la base, pero sigue habiendo margen para personalización y detalles a medida.</p>
+    <p>El catálogo marca la base, pero sigue habiendo margen para personalización y detalles a medida.</p>
   </article>
   <article>
     <span>Producción</span>
     <strong>Hecho a mano</strong>
-    <p>Cada pieza se prepara con ritmo de taller y seguimiento desde “En fábrica” hasta la entrega.</p>
+    <p>Cada pieza se prepara en taller, con series cortas y seguimiento pedido a pedido.</p>
   </article>
 </section>
 
@@ -44,7 +68,7 @@
   <div class="section-heading">
     <p class="eyebrow">Selección destacada</p>
     <h2>Una vista rápida de Martura</h2>
-    <p>Piezas que resumen bien el tono del catálogo actual y ayudan a entrar en materia enseguida.</p>
+    <p>Piezas elegidas para entrar en la tienda sin tener que recorrer todavía todo el catálogo.</p>
   </div>
 
   <div class="featured-grid">
@@ -58,160 +82,13 @@
           <h3>{{ product.name }}</h3>
           <div class="featured-footer">
             <strong>{{ getCurrentPrice(product) | currency: 'EUR' : 'symbol' : '1.0-0' : 'es' }}</strong>
-            <button type="button" class="text-button" (click)="shareProduct(product)">Compartir</button>
+            <div class="featured-actions">
+              <button type="button" class="text-button" (click)="shareProduct(product)">Compartir</button>
+              <a class="button ghost compact" [routerLink]="['/producto', product.slug]">Ver ficha</a>
+            </div>
           </div>
         </div>
       </article>
     }
   </div>
 </section>
-
-<section class="catalog-section" id="catalogo">
-  <div class="catalog-toolbar">
-    <div class="catalog-heading">
-      <p class="eyebrow">Catálogo</p>
-      <h2>Piezas disponibles</h2>
-      <p class="catalog-summary">
-        {{ filteredCount$ | async }} pieza(s) visibles de {{ catalogCount$ | async }}
-      </p>
-    </div>
-
-    @if (filters$ | async; as filters) {
-      <div class="filters-panel">
-        <div class="filters-grid">
-          <label class="search-field">
-            <span>Buscar</span>
-            <input
-              type="search"
-              placeholder="Busca bolsos, neceseres, packs..."
-              [value]="filters.query"
-              (input)="updateQuery($any($event.target).value)"
-            />
-          </label>
-
-          <label class="select-field">
-            <span>Categoría</span>
-            <select [value]="filters.categorySlug ?? ''" (change)="selectCategory($any($event.target).value || null)">
-              <option value="">Todas</option>
-              @for (category of categories$ | async; track category.slug) {
-                <option [value]="category.slug">{{ category.name }}</option>
-              }
-            </select>
-          </label>
-
-          <label class="select-field">
-            <span>Subcategoría</span>
-            <select [value]="filters.subcategorySlug ?? ''" (change)="selectSubcategory($any($event.target).value || null)">
-              <option value="">Todas</option>
-              @for (subcategory of subcategories$ | async; track subcategory.slug) {
-                <option [value]="subcategory.slug">{{ subcategory.name }}</option>
-              }
-            </select>
-          </label>
-
-          <label class="select-field">
-            <span>Colección</span>
-            <select [value]="filters.collectionSlug ?? ''" (change)="selectCollection($any($event.target).value || null)">
-              <option value="">Todas</option>
-              @for (collection of collections$ | async; track collection.slug) {
-                <option [value]="collection.slug">{{ collection.name }}</option>
-              }
-            </select>
-          </label>
-
-          <label class="select-field compact">
-            <span>Ordenar</span>
-            <select [value]="filters.sortBy" (change)="sortCatalog($any($event.target).value)">
-              @for (option of sortOptions; track option.value) {
-                <option [value]="option.value">{{ option.label }}</option>
-              }
-            </select>
-          </label>
-        </div>
-
-        <div class="filters-meta">
-          <label class="checkbox-chip">
-            <input type="checkbox" [checked]="filters.onlyOffers" (change)="toggleOffers($any($event.target).checked)" />
-            Solo promociones
-          </label>
-
-          @if (hasActiveFilters(filters)) {
-            <button type="button" class="clear-filters" (click)="clearFilters()">Limpiar filtros</button>
-          }
-        </div>
-      </div>
-    }
-  </div>
-
-  @if (loading$ | async) {
-    <div class="catalog-loading">
-      <mat-spinner diameter="32"></mat-spinner>
-      <p>Cargando catálogo...</p>
-    </div>
-  } @else {
-    <div class="product-grid">
-      @for (product of filteredProducts$ | async; track product.id) {
-        <article class="product-card">
-          <a [routerLink]="['/producto', product.slug]" class="product-image">
-            <img [src]="product.imageUrl" [alt]="product.name" />
-            @if (getBadgeLabel(product); as badgeLabel) {
-              <span [class.sold-out-badge]="product.status === 'sold_out'">{{ badgeLabel }}</span>
-            }
-          </a>
-
-          <div class="product-content">
-            <p>{{ getTaxonomyLabel(product) }}</p>
-            <h3>{{ product.name }}</h3>
-            <p class="product-description">{{ product.description }}</p>
-
-            @if (getCampaignSummary(product); as campaignSummary) {
-              <p class="campaign-summary">{{ campaignSummary }}</p>
-            }
-
-            <div class="product-footer">
-              <div class="price-stack">
-                <strong>{{ getCurrentPrice(product) | currency: 'EUR' : 'symbol' : '1.0-0' : 'es' }}</strong>
-                @if (getComparePrice(product); as comparePrice) {
-                  <span>{{ comparePrice | currency: 'EUR' : 'symbol' : '1.0-0' : 'es' }}</span>
-                }
-              </div>
-
-              <div class="product-actions">
-                <button type="button" class="icon-button" (click)="shareProduct(product)">Compartir</button>
-                <button type="button" [disabled]="!isAvailable(product)" (click)="addToCart(product)">
-                  {{ isAvailable(product) ? 'Añadir' : 'Agotado' }}
-                </button>
-              </div>
-            </div>
-          </div>
-        </article>
-      } @empty {
-        <div class="empty-state-block">
-          <p>No hay piezas con esos filtros.</p>
-          <button type="button" class="button ghost" (click)="clearFilters()">Ver todo el catálogo</button>
-        </div>
-      }
-    </div>
-  }
-</section>
-
-@if (settings$ | async; as settings) {
-  <section class="about-section" id="sobre-mi">
-    <div class="section-heading">
-      <p class="eyebrow">Sobre mí</p>
-      <h2>{{ settings.aboutTitle }}</h2>
-      <p>{{ settings.aboutBody }}</p>
-    </div>
-    <div class="about-card">
-      <div>
-        <span>Consultas</span>
-        <strong>{{ settings.contactEmail }}</strong>
-      </div>
-      <div>
-        <span>Pago activo</span>
-        <strong>Bizum al {{ settings.bizumPhone }}</strong>
-      </div>
-      <a class="button primary" routerLink="/consultas">Quiero escribirte</a>
-    </div>
-  </section>
-}

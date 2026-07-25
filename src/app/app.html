@@ -9,18 +9,27 @@
 
   <nav class="main-nav" aria-label="Navegación principal">
     <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Home</a>
-    <a routerLink="/" fragment="catalogo">Catálogo</a>
-    <a routerLink="/" fragment="sobre-mi">Sobre mí</a>
-    <a routerLink="/consultas" routerLinkActive="active">Consultas</a>
+    <a routerLink="/catalogo" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Catálogo</a>
+    <a routerLink="/sobre-mi" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Sobre mí</a>
+    <a routerLink="/consultas" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Consultas</a>
   </nav>
 
   <div class="header-actions">
-    <a class="cart-link" routerLink="/carrito" aria-label="Ver carrito">
-      <span>Carrito</span>
+    @if (!isPrivateArea()) {
       @if (cartItems$ | async; as totalItems) {
-        <strong>{{ totalItems }}</strong>
+        @if (totalItems > 0) {
+          <a class="cart-link" routerLink="/carrito" aria-label="Ver carrito">
+            <span>Mi carrito</span>
+            <strong>{{ totalItems }}</strong>
+          </a>
+        } @else {
+          <span class="cart-link cart-link-disabled" aria-disabled="true">
+            <span>Mi carrito</span>
+            <strong>0</strong>
+          </span>
+        }
       }
-    </a>
+    }
 
     @if (user$ | async; as user) {
       @if (isAdmin$ | async) {
@@ -31,8 +40,6 @@
         <small>{{ user.email }}</small>
       </span>
       <button type="button" class="session-button" (click)="logout()">Salir</button>
-    } @else {
-      <a class="session-role" routerLink="/login" [queryParams]="{ role: 'admin' }">Acceso admin</a>
     }
   </div>
 </header>

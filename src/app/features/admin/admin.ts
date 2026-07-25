@@ -1,8 +1,9 @@
 import { AsyncPipe, CurrencyPipe, DatePipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, signal } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { FirebaseError } from 'firebase/app';
 import { combineLatest, map, startWith } from 'rxjs';
 
 import { authMode } from '../../core/firebase/firebase.config';
@@ -34,6 +35,7 @@ import { CatalogTaxonomy } from '../../core/models/taxonomy.model';
 import { HeroSlide, ShopSettings } from '../../core/models/shop-settings.model';
 import { resolveProductPricing } from '../../core/utils/product-pricing';
 import { slugify } from '../../core/utils/slug';
+import { environment } from '../../../environments/environment';
 import { AlertsService } from '../../core/services/alerts.service';
 import { CampaignsService } from '../../core/services/campaigns.service';
 import { DiscountCodesService } from '../../core/services/discount-codes.service';
@@ -101,10 +103,14 @@ export class Admin {
   readonly activeDiscountCodeActionId = signal<string | null>(null);
   readonly activeOrderActionId = signal<string | null>(null);
   readonly galleryUrls = signal<string[]>([]);
+  readonly heroSlides = signal<HeroSlide[]>([]);
+  readonly activeHeroUploadId = signal<string | null>(null);
   readonly catalogSort = signal<{ key: CatalogSortKey; direction: SortDirection }>({
     key: 'position',
     direction: 'asc',
   });
+  readonly adminEmailHint = environment.firebase.adminEmails[0] ?? 'correo administrador';
+  readonly catalogSort$ = toObservable(this.catalogSort);
 
   readonly navItems: AdminNavItem[] = [
     { key: 'orders', label: 'Pedidos', caption: 'Flujo de fabricación y entrega' },
@@ -171,6 +177,8 @@ export class Admin {
   readonly orderFiltersForm = this.formBuilder.nonNullable.group({
     status: ['all' as OrderFilters['status']],
     query: [''],
+    dateFrom: [''],
+    dateTo: [''],
   });
   readonly catalogFiltersForm = this.formBuilder.nonNullable.group({
     query: [''],
@@ -252,10 +260,15 @@ export class Admin {
   ]).pipe(
     map(([orders, filters]) => {
       const query = (filters.query ?? '').trim().toLowerCase();
+      const dateFrom = filters.dateFrom ? new Date(`${filters.dateFrom}T00:00:00`) : null;
+      const dateTo = filters.dateTo ? new Date(`${filters.dateTo}T23:59:59.999`) : null;
 
       return [...orders]
         .filter((order) => {
           const matchesStatus = filters.status === 'all' || order.status === filters.status;
+          const matchesDate =
+            (!dateFrom || order.createdAt >= dateFrom) &&
+            (!dateTo || order.createdAt <= dateTo);
           const matchesQuery =
             !query ||
             order.id.toLowerCase().includes(query) ||
@@ -265,7 +278,7 @@ export class Admin {
             order.customer.dni.toLowerCase().includes(query) ||
             order.items.some((item) => item.productName.toLowerCase().includes(query));
 
-          return matchesStatus && matchesQuery;
+          return matchesStatus && matchesDate && matchesQuery;
         })
         .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime());
     }),
@@ -275,8 +288,9 @@ export class Admin {
     this.products$,
     this.catalogFiltersForm.valueChanges.pipe(startWith(this.catalogFiltersForm.getRawValue())),
     this.campaignsService.activeCampaigns$,
+    this.catalogSort$,
   ]).pipe(
-    map(([products, filters]) => {
+    map(([products, filters, _, sort]) => {
       const query = (filters.query ?? '').trim().toLowerCase();
       const filteredProducts = !query
         ? products
@@ -295,7 +309,7 @@ export class Admin {
           );
 
       return [...filteredProducts].sort((left, right) =>
-        this.compareCatalogProducts(left, right, this.catalogSort().key, this.catalogSort().direction),
+        this.compareCatalogProducts(left, right, sort.key, sort.direction),
       );
     }),
   );
@@ -564,6 +578,101 @@ export class Admin {
 
     [gallery[index], gallery[nextIndex]] = [gallery[nextIndex], gallery[index]];
     this.galleryUrls.set(gallery);
+  }
+
+  addHeroSlide(): void {
+    this.heroSlides.set(
+      this.reindexHeroSlides([
+        ...this.heroSlides(),
+        {
+          id: `hero-${Date.now()}`,
+          imageUrl: '',
+          headline: '',
+          caption: '',
+          position: 0,
+          active: true,
+        },
+      ]),
+    );
+  }
+
+  updateHeroSlideField(index: number, field: 'caption' | 'headline', value: string): void {
+    const slides = [...this.heroSlides()];
+    const slide = slides[index];
+
+    if (!slide) {
+      return;
+    }
+
+    slides[index] = {
+      ...slide,
+      [field]: value,
+    };
+
+    this.heroSlides.set(slides);
+  }
+
+  toggleHeroSlideActive(index: number, active: boolean): void {
+    const slides = [...this.heroSlides()];
+    const slide = slides[index];
+
+    if (!slide) {
+      return;
+    }
+
+    slides[index] = {
+      ...slide,
+      active,
+    };
+
+    this.heroSlides.set(slides);
+  }
+
+  async uploadHeroSlideImage(index: number, event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement | null;
+    const file = input?.files?.[0] ?? null;
+    const slide = this.heroSlides()[index] ?? null;
+
+    if (!file || !slide) {
+      return;
+    }
+
+    try {
+      this.activeHeroUploadId.set(slide.id);
+      this.clearMessages();
+      const imageUrl = await this.mediaService.uploadHeroSlideImage(file);
+      const slides = [...this.heroSlides()];
+      slides[index] = {
+        ...slide,
+        imageUrl,
+      };
+      this.heroSlides.set(slides);
+      this.setSuccess('Imagen del slide subida correctamente.');
+    } catch (error) {
+      this.setError(error, 'No se pudo subir la imagen del slide.');
+    } finally {
+      this.activeHeroUploadId.set(null);
+
+      if (input) {
+        input.value = '';
+      }
+    }
+  }
+
+  moveHeroSlide(index: number, direction: -1 | 1): void {
+    const nextIndex = index + direction;
+    const slides = [...this.heroSlides()];
+
+    if (nextIndex < 0 || nextIndex >= slides.length) {
+      return;
+    }
+
+    [slides[index], slides[nextIndex]] = [slides[nextIndex], slides[index]];
+    this.heroSlides.set(this.reindexHeroSlides(slides));
+  }
+
+  removeHeroSlide(index: number): void {
+    this.heroSlides.set(this.reindexHeroSlides(this.heroSlides().filter((_, slideIndex) => slideIndex !== index)));
   }
 
   async saveCampaign(): Promise<void> {
@@ -841,10 +950,21 @@ export class Admin {
       return;
     }
 
+    let settingsDraft: ShopSettings;
+
+    try {
+      settingsDraft = this.formToSettingsDraft();
+    } catch (error) {
+      this.showValidationError(
+        error instanceof Error ? error.message : 'Revisa los slides del carrusel antes de guardar.',
+      );
+      return;
+    }
+
     try {
       this.isSavingSettings.set(true);
       this.clearMessages();
-      await this.shopSettingsService.saveSettings(this.formToSettingsDraft());
+      await this.shopSettingsService.saveSettings(settingsDraft);
       this.setSuccess('Ajustes guardados correctamente.');
     } catch (error) {
       this.setError(error, 'No se pudieron guardar los ajustes.');
@@ -1001,63 +1121,42 @@ export class Admin {
   }
 
   private buildHeroSlidesFromForm(): HeroSlide[] {
-    const value = this.settingsForm.getRawValue();
-    const slides = [
-      {
-        id: 'hero-1',
-        imageUrl: value.hero1ImageUrl.trim(),
-        headline: value.hero1Headline.trim(),
-        caption: value.hero1Caption.trim(),
-        position: 10,
-        active: value.hero1Active,
-      },
-      {
-        id: 'hero-2',
-        imageUrl: value.hero2ImageUrl.trim(),
-        headline: value.hero2Headline.trim(),
-        caption: value.hero2Caption.trim(),
-        position: 20,
-        active: value.hero2Active,
-      },
-      {
-        id: 'hero-3',
-        imageUrl: value.hero3ImageUrl.trim(),
-        headline: value.hero3Headline.trim(),
-        caption: value.hero3Caption.trim(),
-        position: 30,
-        active: value.hero3Active,
-      },
-    ];
+    const slides = this.reindexHeroSlides(
+      this.heroSlides().map((slide) => ({
+        ...slide,
+        imageUrl: slide.imageUrl.trim(),
+        headline: slide.headline.trim(),
+        caption: slide.caption.trim(),
+      })),
+    );
+    const hasIncompleteSlide = slides.some((slide) => {
+      const filledFields = [slide.imageUrl, slide.headline, slide.caption].filter(Boolean).length;
+      return filledFields > 0 && filledFields < 3;
+    });
+
+    if (hasIncompleteSlide) {
+      throw new Error('Cada slide debe tener imagen, titular y texto, o quedarse completamente vacío.');
+    }
 
     return slides.filter((slide) => slide.imageUrl && slide.headline && slide.caption);
   }
 
   private patchSettingsForm(settings: ShopSettings): void {
-    const [hero1, hero2, hero3] = [
-      settings.heroSlides[0] ?? null,
-      settings.heroSlides[1] ?? null,
-      settings.heroSlides[2] ?? null,
-    ];
-
     this.settingsForm.patchValue({
       bizumPhone: settings.bizumPhone,
       shippingPrice: settings.shippingPrice,
       contactEmail: settings.contactEmail,
       aboutTitle: settings.aboutTitle,
       aboutBody: settings.aboutBody,
-      hero1ImageUrl: hero1?.imageUrl ?? '',
-      hero1Headline: hero1?.headline ?? '',
-      hero1Caption: hero1?.caption ?? '',
-      hero1Active: hero1?.active ?? false,
-      hero2ImageUrl: hero2?.imageUrl ?? '',
-      hero2Headline: hero2?.headline ?? '',
-      hero2Caption: hero2?.caption ?? '',
-      hero2Active: hero2?.active ?? false,
-      hero3ImageUrl: hero3?.imageUrl ?? '',
-      hero3Headline: hero3?.headline ?? '',
-      hero3Caption: hero3?.caption ?? '',
-      hero3Active: hero3?.active ?? false,
     }, { emitEvent: false });
+
+    this.heroSlides.set(
+      this.reindexHeroSlides(
+        settings.heroSlides.length
+          ? settings.heroSlides.map((slide) => ({ ...slide }))
+          : [],
+      ),
+    );
   }
 
   private compareCatalogProducts(
@@ -1213,10 +1312,36 @@ export class Admin {
   }
 
   private setError(error: unknown, fallback: string): void {
-    const message = error instanceof Error && error.message ? error.message : fallback;
+    const message = this.mapAdminError(error, fallback);
     this.errorMessage.set(message);
     this.feedbackMessage.set(null);
     this.alertsService.toast('error', message);
+  }
+
+  private mapAdminError(error: unknown, fallback: string): string {
+    const message =
+      error instanceof Error && error.message
+        ? error.message
+        : typeof error === 'object' && error && 'message' in error
+          ? String(error.message)
+          : fallback;
+    const code =
+      error instanceof FirebaseError
+        ? error.code
+        : typeof error === 'object' && error && 'code' in error
+          ? String(error.code)
+          : null;
+
+    if (
+      code === 'permission-denied' ||
+      code === 'storage/unauthorized' ||
+      code === 'functions/permission-denied' ||
+      /insufficient permissions/i.test(message)
+    ) {
+      return `Firebase está rechazando la escritura. Comprueba que has iniciado sesión con ${this.adminEmailHint} y que las reglas de Firestore y Storage están desplegadas en el proyecto correcto.`;
+    }
+
+    return message;
   }
 
   private formatDateInput(value: Date | null): string {
@@ -1225,5 +1350,12 @@ export class Admin {
     }
 
     return value.toISOString().slice(0, 10);
+  }
+
+  private reindexHeroSlides(slides: HeroSlide[]): HeroSlide[] {
+    return slides.map((slide, index) => ({
+      ...slide,
+      position: (index + 1) * 10,
+    }));
   }
 }

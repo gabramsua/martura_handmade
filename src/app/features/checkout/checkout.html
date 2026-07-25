@@ -5,7 +5,7 @@
     <p>Introduce tus datos, añade un comentario si lo necesitas y te mostraremos el pago por Bizum al terminar.</p>
   </div>
 
-  @if (lastOrder) {
+  @if (lastOrder(); as order) {
     <div class="order-confirmation">
       <p class="eyebrow">Pedido registrado</p>
       <h2>Ya puedes completar el Bizum</h2>
@@ -14,11 +14,11 @@
       <div class="confirmation-card">
         <div class="confirmation-meta">
           <span>Referencia</span>
-          <strong>{{ lastOrder.id }}</strong>
+          <strong>{{ order.id }}</strong>
         </div>
         <div class="confirmation-meta">
           <span>Total</span>
-          <strong>{{ lastOrder.total | currency: 'EUR' }}</strong>
+          <strong>{{ order.total | currency: 'EUR' }}</strong>
         </div>
         <div class="confirmation-meta">
           <span>Bizum</span>
@@ -26,19 +26,19 @@
         </div>
         <div class="confirmation-meta">
           <span>Concepto</span>
-          <strong>{{ lastOrder.id }}</strong>
+          <strong>{{ order.id }}</strong>
         </div>
       </div>
 
-      @if (lastOrder.discount) {
+      @if (order.discount) {
         <p class="discount-note">
-          Código aplicado: <strong>{{ lastOrder.discount.code }}</strong>
-          · descuento {{ lastOrder.discount.amount | currency: 'EUR' }}
+          Código aplicado: <strong>{{ order.discount.code }}</strong>
+          · descuento {{ order.discount.amount | currency: 'EUR' }}
         </p>
       }
 
       <div class="confirmation-items">
-        @for (item of lastOrder.items; track item.productId + item.variant) {
+        @for (item of order.items; track item.productId + item.variant) {
           <article>
             <img [src]="item.imageUrl" [alt]="item.productName" />
             <div>
@@ -127,6 +127,9 @@
             Código de descuento
             <input type="text" formControlName="discountCode" placeholder="Opcional" />
           </label>
+          @if (getControlErrorMessage('discountCode'); as message) {
+            <p class="form-error">{{ message }}</p>
+          }
 
           <label class="wide">
             Comentario para el pedido
@@ -141,53 +144,67 @@
             <p class="form-error wide">{{ message }}</p>
           }
 
-          @if (submissionMessage) {
-            <p class="saved-order">{{ submissionMessage }}</p>
+          @if (submissionMessage()) {
+            <p class="saved-order">{{ submissionMessage() }}</p>
           }
 
-          @if (errorMessage) {
-            <p class="form-error wide">{{ errorMessage }}</p>
+          @if (errorMessage()) {
+            <p class="form-error wide">{{ errorMessage() }}</p>
           }
 
-          <button class="button primary wide" type="submit" [disabled]="isSubmitting">
-            @if (isSubmitting) {
+          <button class="button primary wide" type="submit" [disabled]="isSubmitting()">
+            @if (isSubmitting()) {
               <mat-spinner diameter="18"></mat-spinner>
             }
-            {{ isSubmitting ? 'Guardando pedido...' : 'Crear pedido y ver Bizum' }}
+            {{ isSubmitting() ? 'Guardando pedido...' : 'Crear pedido y ver Bizum' }}
           </button>
         </form>
 
         <aside class="order-preview">
-          <h2>Resumen del pedido</h2>
-          @for (item of summary.items; track item.product.id + item.variant) {
-            <div class="preview-item">
-              <span>{{ item.quantity }} x {{ item.product.name }}</span>
-              <strong>{{ getLineTotal(item) | currency: 'EUR' }}</strong>
+          <div class="preview-header">
+            <div>
+              <p class="eyebrow">Resumen</p>
+              <h2>Tu pedido</h2>
             </div>
-          }
-
-          <div class="preview-total">
-            <span>Subtotal</span>
-            <strong>{{ summary.subtotal | currency: 'EUR' }}</strong>
+            <strong>{{ summary.items.length }} {{ summary.items.length === 1 ? 'artículo' : 'artículos' }}</strong>
           </div>
 
-          @if (discountPreview$ | async; as discount) {
-            @if (discount) {
-              <div class="preview-total discount-row">
-                <span>Descuento {{ discount.code.code }}</span>
-                <strong>-{{ discount.amount | currency: 'EUR' }}</strong>
+          <div class="preview-items">
+            @for (item of summary.items; track item.product.id + item.variant) {
+              <div class="preview-item">
+                <div>
+                  <strong>{{ item.product.name }}</strong>
+                  <span>{{ item.quantity }} x {{ item.variant }}</span>
+                </div>
+                <strong>{{ getLineTotal(item) | currency: 'EUR' }}</strong>
               </div>
             }
-          }
-
-          <div class="preview-total">
-            <span>Envío</span>
-            <strong>{{ shopSettingsService.settingsSnapshot.shippingPrice | currency: 'EUR' }}</strong>
           </div>
 
-          <div class="preview-total grand-total">
-            <span>Total</span>
-            <strong>{{ finalTotal$ | async | currency: 'EUR' }}</strong>
+          <div class="preview-totals">
+            <div class="preview-total">
+              <span>Subtotal</span>
+              <strong>{{ summary.subtotal | currency: 'EUR' }}</strong>
+            </div>
+
+            @if (discountPreview$ | async; as discount) {
+              @if (discount) {
+                <div class="preview-total discount-row">
+                  <span>Descuento {{ discount.code.code }}</span>
+                  <strong>-{{ discount.amount | currency: 'EUR' }}</strong>
+                </div>
+              }
+            }
+
+            <div class="preview-total">
+              <span>Envío</span>
+              <strong>{{ shopSettingsService.settingsSnapshot.shippingPrice | currency: 'EUR' }}</strong>
+            </div>
+
+            <div class="preview-total grand-total">
+              <span>Total</span>
+              <strong>{{ finalTotal$ | async | currency: 'EUR' }}</strong>
+            </div>
           </div>
 
           <p class="preview-note">

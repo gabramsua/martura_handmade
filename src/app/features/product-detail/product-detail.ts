@@ -1,5 +1,6 @@
 import { AsyncPipe, CurrencyPipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { map, switchMap } from 'rxjs';
 
@@ -27,6 +28,7 @@ export class ProductDetail {
   private readonly cartService = inject(CartService);
   readonly shopSettingsService = inject(ShopSettingsService);
   readonly selectedImageUrl = signal<string | null>(null);
+  readonly cartItems = toSignal(this.cartService.items$, { initialValue: [] });
 
   readonly product$ = this.route.paramMap.pipe(
     map((params) => params.get('slug') ?? ''),
@@ -102,6 +104,11 @@ export class ProductDetail {
 
   getTaxonomyLabel(product: Product): string {
     return [product.category, product.subcategory, product.collection].filter(Boolean).join(' · ');
+  }
+
+  getCartQuantity(product: Product, variant?: string): number {
+    this.cartItems();
+    return this.cartService.getQuantityForVariant(product.id, variant ?? product.sizes[0] ?? 'Única');
   }
 
   private getResolvedCampaign(product: Product): Campaign | null {

@@ -26,9 +26,10 @@
 }
 
 .checkout-layout {
+  align-items: start;
   display: grid;
   gap: 20px;
-  grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.8fr);
+  grid-template-columns: minmax(0, 1.35fr) minmax(300px, 360px);
 }
 
 .checkout-form,
@@ -105,10 +106,16 @@ textarea {
   border-radius: 8px;
   color: #2c241f;
   display: inline-flex;
+  gap: 10px;
   justify-content: center;
   min-height: 42px;
   padding: 0 16px;
   text-decoration: none;
+}
+
+.button:disabled {
+  cursor: wait;
+  opacity: 0.75;
 }
 
 .button.primary {
@@ -128,7 +135,64 @@ textarea {
   padding: 22px;
 }
 
-.preview-item,
+.order-preview {
+  align-self: start;
+  gap: 14px;
+  padding: 18px;
+  position: sticky;
+  top: 104px;
+}
+
+.preview-header {
+  align-items: start;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.preview-header strong {
+  color: #5d4a3d;
+  font-size: 0.95rem;
+  white-space: nowrap;
+}
+
+.preview-items {
+  display: grid;
+  gap: 10px;
+  max-height: 220px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.preview-item {
+  align-items: start;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.preview-item div {
+  display: grid;
+  gap: 4px;
+}
+
+.preview-item strong {
+  font-size: 0.96rem;
+}
+
+.preview-item span,
+.confirmation-meta span {
+  color: #8c7d72;
+  font-size: 0.9rem;
+}
+
+.preview-totals {
+  border-top: 1px solid #e7ddd0;
+  display: grid;
+  gap: 10px;
+  padding-top: 12px;
+}
+
 .preview-total,
 .confirmation-meta,
 .confirmation-actions {
@@ -147,6 +211,10 @@ textarea {
   color: #7e4f36;
 }
 
+.preview-note {
+  font-size: 0.92rem;
+}
+
 .confirmation-card {
   display: grid;
   gap: 12px;
@@ -157,11 +225,6 @@ textarea {
 .confirmation-meta {
   align-items: flex-start;
   flex-direction: column;
-}
-
-.confirmation-meta span,
-.preview-item span {
-  color: #8c7d72;
 }
 
 .confirmation-items {
@@ -199,6 +262,10 @@ textarea {
   .confirmation-card {
     grid-template-columns: 1fr;
   }
+
+  .order-preview {
+    position: static;
+  }
 }
 
 @media (max-width: 720px) {
@@ -211,8 +278,14 @@ textarea {
     grid-template-columns: 1fr;
   }
 
-  .confirmation-actions {
+  .confirmation-actions,
+  .preview-header,
+  .preview-item {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .preview-header strong {
+    white-space: normal;
   }
 }

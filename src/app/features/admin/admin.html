@@ -50,45 +50,46 @@
             <h2>Pedidos</h2>
             <p>Seguimiento de fabricación, envío y entrega.</p>
           </div>
-          <form class="toolbar" [formGroup]="orderFiltersForm">
+          <form class="toolbar orders-toolbar" [formGroup]="orderFiltersForm">
             <input type="search" formControlName="query" placeholder="Buscar pedido, cliente, DNI o producto" />
             <select formControlName="status">
               @for (status of orderStatusOptions; track status.value) {
                 <option [value]="status.value">{{ status.label }}</option>
               }
             </select>
+            <label class="toolbar-field">
+              <span>Desde</span>
+              <input type="date" formControlName="dateFrom" />
+            </label>
+            <label class="toolbar-field">
+              <span>Hasta</span>
+              <input type="date" formControlName="dateTo" />
+            </label>
           </form>
         </div>
 
-        <div class="orders-list">
-          @for (order of filteredOrders$ | async; track order.id) {
-            <article class="order-card">
-              <div class="order-card-head">
-                <div>
-                  <strong>{{ order.id }}</strong>
-                  <small>{{ order.createdAt | date: 'dd/MM/yyyy HH:mm' }}</small>
-                </div>
-                <mark class="status-badge">{{ getOrderStatusLabel(order) }}</mark>
-              </div>
+        <div class="orders-table">
+          <div class="orders-table-head">
+            <span>Pedido</span>
+            <span>Fecha</span>
+            <span>Cliente</span>
+            <span>Total</span>
+            <span>Estado</span>
+          </div>
 
-              <div class="order-grid">
-                <div>
-                  <span>Cliente</span>
+          @for (order of filteredOrders$ | async; track order.id) {
+            <details class="order-accordion">
+              <summary class="orders-table-row">
+                <span class="order-primary-cell">
+                  <strong>{{ order.id }}</strong>
+                  <small>{{ order.items.length }} línea(s)</small>
+                </span>
+                <span>{{ order.createdAt | date: 'dd/MM/yyyy HH:mm' }}</span>
+                <span class="order-primary-cell">
                   <strong>{{ order.customer.name }}</strong>
-                  <small>{{ order.customer.email }} · {{ order.customer.phone }}</small>
-                </div>
-                <div>
-                  <span>DNI</span>
-                  <strong>{{ order.customer.dni }}</strong>
-                  <small>{{ order.customer.postalCode }} · {{ order.customer.city }}</small>
-                </div>
-                <div>
-                  <span>Dirección</span>
-                  <strong>{{ order.customer.addressLine1 }}</strong>
-                  <small>{{ order.customer.province }}</small>
-                </div>
-                <div>
-                  <span>Total</span>
+                  <small>{{ order.customer.email }}</small>
+                </span>
+                <span class="order-primary-cell">
                   <strong>{{ order.total | currency: 'EUR' }}</strong>
                   <small>
                     {{ order.subtotal | currency: 'EUR' }}
@@ -96,42 +97,71 @@
                       · dto. {{ order.discount.amount | currency: 'EUR' }}
                     }
                   </small>
+                </span>
+                <span>
+                  <mark class="status-badge">{{ getOrderStatusLabel(order) }}</mark>
+                </span>
+              </summary>
+
+              <div class="order-accordion-body">
+                <div class="order-grid">
+                  <div>
+                    <span>Cliente</span>
+                    <strong>{{ order.customer.name }}</strong>
+                    <small>{{ order.customer.email }} · {{ order.customer.phone }}</small>
+                  </div>
+                  <div>
+                    <span>DNI</span>
+                    <strong>{{ order.customer.dni }}</strong>
+                    <small>{{ order.customer.postalCode }} · {{ order.customer.city }}</small>
+                  </div>
+                  <div>
+                    <span>Dirección</span>
+                    <strong>{{ order.customer.addressLine1 }}</strong>
+                    <small>{{ order.customer.province }}</small>
+                  </div>
+                  <div>
+                    <span>Pago y envío</span>
+                    <strong>Bizum</strong>
+                    <small>{{ order.shipping | currency: 'EUR' }} de envío</small>
+                  </div>
+                </div>
+
+                @if (order.customer.comments) {
+                  <p class="order-notes"><strong>Comentario:</strong> {{ order.customer.comments }}</p>
+                }
+
+                <div class="order-lines">
+                  @for (item of order.items; track item.productId + item.variant) {
+                    <div class="order-line">
+                      <span>{{ item.quantity }} x {{ item.productName }}</span>
+                      <small>{{ item.variant }} · {{ item.lineTotal | currency: 'EUR' }}</small>
+                    </div>
+                  }
+                </div>
+
+                <div class="order-actions">
+                  @for (action of getOrderProgressActions(order); track action.status) {
+                    <button
+                      type="button"
+                      class="button ghost"
+                      [disabled]="activeOrderActionId() === order.id"
+                      (click)="updateOrderStatus(order, action.status)">
+                      {{ action.label }}
+                    </button>
+                  }
+                  @if (canCancelOrder(order)) {
+                    <button
+                      type="button"
+                      class="button danger"
+                      [disabled]="activeOrderActionId() === order.id"
+                      (click)="updateOrderStatus(order, 'cancelled')">
+                      Cancelar
+                    </button>
+                  }
                 </div>
               </div>
-
-              @if (order.customer.comments) {
-                <p class="order-notes"><strong>Comentario:</strong> {{ order.customer.comments }}</p>
-              }
-            <div class="order-lines">
-                @for (item of order.items; track item.productId + item.variant) {
-                  <div class="order-line">
-                    <span>{{ item.quantity }} x {{ item.productName }}</span>
-                    <small>{{ item.variant }} · {{ item.lineTotal | currency: 'EUR' }}</small>
-                  </div>
-                }
-              </div>
-
-              <div class="order-actions">
-                @for (action of getOrderProgressActions(order); track action.status) {
-                  <button
-                    type="button"
-                    class="button ghost"
-                    [disabled]="activeOrderActionId() === order.id"
-                    (click)="updateOrderStatus(order, action.status)">
-                    {{ action.label }}
-                  </button>
-                }
-                @if (canCancelOrder(order)) {
-                  <button
-                    type="button"
-                    class="button danger"
-                    [disabled]="activeOrderActionId() === order.id"
-                    (click)="updateOrderStatus(order, 'cancelled')">
-                    Cancelar
-                  </button>
-                }
-              </div>
-            </article>
+            </details>
           } @empty {
             <p class="empty-state">No hay pedidos que coincidan con el filtro actual.</p>
           }
@@ -341,8 +371,8 @@
                   <img [src]="image" alt="" />
                   <div class="gallery-actions">
                     <button type="button" class="button ghost" (click)="setPrimaryImage(index)">Principal</button>
-                    <button type="button" class="button ghost" (click)="moveGalleryImage(index, -1)">↑</button>
-                    <button type="button" class="button ghost" (click)="moveGalleryImage(index, 1)">↓</button>
+                    <button type="button" class="button ghost" (click)="moveGalleryImage(index, -1)">Subir</button>
+                    <button type="button" class="button ghost" (click)="moveGalleryImage(index, 1)">Bajar</button>
                     <button type="button" class="button danger" (click)="removeGalleryImage(index)">Quitar</button>
                   </div>
                 </article>
@@ -466,7 +496,7 @@
     }
 
     @if (activeView() === 'promotions') {
-      <section class="taxonomy-grid">
+      <section class="promotions-stack">
         <article class="panel">
           <div class="panel-header">
             <div>
@@ -611,37 +641,57 @@
             <textarea rows="5" formControlName="aboutBody"></textarea>
           </label>
 
+          <div class="wide hero-settings-header">
+            <div>
+              <strong>Carrusel principal</strong>
+              <small>Sube imágenes, cambia el orden y activa solo los slides que quieras mostrar.</small>
+            </div>
+            <button type="button" class="button ghost" (click)="addHeroSlide()">Añadir slide</button>
+          </div>
+
           <div class="wide hero-settings-grid">
-            <article class="hero-settings-card">
-              <h3>Slide 1</h3>
-              <input type="text" formControlName="hero1ImageUrl" placeholder="URL o asset de imagen" />
-              <input type="text" formControlName="hero1Headline" placeholder="Titular" />
-              <textarea rows="3" formControlName="hero1Caption" placeholder="Texto al pie"></textarea>
-              <label class="checkbox-row">
-                <input type="checkbox" formControlName="hero1Active" />
-                Activo
-              </label>
-            </article>
-            <article class="hero-settings-card">
-              <h3>Slide 2</h3>
-              <input type="text" formControlName="hero2ImageUrl" placeholder="URL o asset de imagen" />
-              <input type="text" formControlName="hero2Headline" placeholder="Titular" />
-              <textarea rows="3" formControlName="hero2Caption" placeholder="Texto al pie"></textarea>
-              <label class="checkbox-row">
-                <input type="checkbox" formControlName="hero2Active" />
-                Activo
-              </label>
-            </article>
-            <article class="hero-settings-card">
-              <h3>Slide 3</h3>
-              <input type="text" formControlName="hero3ImageUrl" placeholder="URL o asset de imagen" />
-              <input type="text" formControlName="hero3Headline" placeholder="Titular" />
-              <textarea rows="3" formControlName="hero3Caption" placeholder="Texto al pie"></textarea>
-              <label class="checkbox-row">
-                <input type="checkbox" formControlName="hero3Active" />
-                Activo
-              </label>
-            </article>
+            @for (slide of heroSlides(); track slide.id; let index = $index) {
+              <article class="hero-settings-card">
+                <div class="hero-card-head">
+                  <h3>Slide {{ index + 1 }}</h3>
+                  <div class="row-actions">
+                    <button type="button" class="button ghost" [disabled]="index === 0" (click)="moveHeroSlide(index, -1)">Subir</button>
+                    <button type="button" class="button ghost" [disabled]="index === heroSlides().length - 1" (click)="moveHeroSlide(index, 1)">Bajar</button>
+                    <button type="button" class="button danger" (click)="removeHeroSlide(index)">Quitar</button>
+                  </div>
+                </div>
+
+                <div class="hero-slide-preview">
+                  @if (slide.imageUrl) {
+                    <img [src]="slide.imageUrl" [alt]="slide.headline || 'Slide del carrusel'" />
+                  } @else {
+                    <div class="empty-media">Sin imagen</div>
+                  }
+                </div>
+
+                <label class="button ghost upload-button">
+                  {{ activeHeroUploadId() === slide.id ? 'Subiendo...' : 'Seleccionar imagen' }}
+                  <input type="file" accept="image/*" [disabled]="activeHeroUploadId() === slide.id" (change)="uploadHeroSlideImage(index, $event)" />
+                </label>
+
+                <label>
+                  Titular
+                  <input type="text" [value]="slide.headline" (input)="updateHeroSlideField(index, 'headline', $any($event.target).value)" />
+                </label>
+
+                <label>
+                  Texto al pie
+                  <textarea rows="3" [value]="slide.caption" (input)="updateHeroSlideField(index, 'caption', $any($event.target).value)"></textarea>
+                </label>
+
+                <label class="checkbox-row">
+                  <input type="checkbox" [checked]="slide.active" (change)="toggleHeroSlideActive(index, $any($event.target).checked)" />
+                  Activo
+                </label>
+              </article>
+            } @empty {
+              <p class="empty-state">Aún no hay slides. Añade el primero para empezar a montar el carrusel.</p>
+            }
           </div>
 
           <div class="form-actions wide">

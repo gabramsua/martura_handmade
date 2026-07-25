@@ -21,7 +21,7 @@
     </div>
 
     <article class="detail-info">
-      <a class="back-link" routerLink="/">Volver a la tienda</a>
+      <a class="back-link" routerLink="/catalogo">Volver al catálogo</a>
       <p class="eyebrow">{{ getTaxonomyLabel(product) }}</p>
       <h1>{{ product.name }}</h1>
       <p class="status-pill" [class.sold-out]="!isAvailable(product)">{{ getStatusLabel(product) }}</p>
@@ -48,7 +48,13 @@
           <div class="variant-list">
             @for (size of product.sizes; track size) {
               <button type="button" [disabled]="!isAvailable(product)" (click)="addToCart(product, size)">
-                {{ isAvailable(product) ? 'Añadir · ' + size : 'Sin stock' }}
+                @if (!isAvailable(product)) {
+                  Sin stock
+                } @else if (getCartQuantity(product, size) > 0) {
+                  Añadido · {{ size }} ({{ getCartQuantity(product, size) }})
+                } @else {
+                  Añadir · {{ size }}
+                }
               </button>
             }
           </div>
@@ -56,7 +62,13 @@
           <p>Compra directa</p>
           <div class="variant-list">
             <button type="button" [disabled]="!isAvailable(product)" (click)="addToCart(product)">
-              {{ isAvailable(product) ? 'Añadir al carrito' : 'Sin stock' }}
+              @if (!isAvailable(product)) {
+                Sin stock
+              } @else if (getCartQuantity(product) > 0) {
+                Añadido al carrito ({{ getCartQuantity(product) }})
+              } @else {
+                Añadir al carrito
+              }
             </button>
           </div>
         }
@@ -94,6 +106,6 @@
 } @else {
   <section class="missing-product">
     <h1>No encontramos esta pieza</h1>
-    <a routerLink="/">Volver a la tienda</a>
+    <a routerLink="/catalogo">Volver al catálogo</a>
   </section>
 }

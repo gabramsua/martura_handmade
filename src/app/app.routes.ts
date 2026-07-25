@@ -1,11 +1,20 @@
 import { Routes } from '@angular/router';
 
 import { adminGuard } from './core/guards/admin.guard';
+import { Cart } from './features/cart/cart';
 
 export const routes: Routes = [
   {
     path: '',
     loadComponent: () => import('./features/home/home').then((component) => component.Home),
+  },
+  {
+    path: 'catalogo',
+    loadComponent: () => import('./features/catalog/catalog').then((component) => component.Catalog),
+  },
+  {
+    path: 'sobre-mi',
+    loadComponent: () => import('./features/about/about').then((component) => component.About),
   },
   {
     path: 'producto/:slug',
@@ -14,7 +23,7 @@ export const routes: Routes = [
   },
   {
     path: 'carrito',
-    loadComponent: () => import('./features/cart/cart').then((component) => component.Cart),
+    component: Cart,
   },
   {
     path: 'checkout',

@@ -94,6 +94,20 @@ export class CartService {
     this.setItems([]);
   }
 
+  getQuantityForProduct(productId: string): number {
+    return this.itemsSubject.value
+      .filter((item) => item.product.id === productId)
+      .reduce((total, item) => total + item.quantity, 0);
+  }
+
+  getQuantityForVariant(productId: string, variant: string): number {
+    return (
+      this.itemsSubject.value.find(
+        (item) => item.product.id === productId && item.variant === variant,
+      )?.quantity ?? 0
+    );
+  }
+
   private buildSummary(items: CartItem[]): CartSummary {
     const subtotal = items.reduce((total, item) => {
       const price = resolveProductPricing(

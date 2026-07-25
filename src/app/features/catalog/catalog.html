@@ -1,0 +1,155 @@
+<section class="catalog-page">
+  <div class="section-heading">
+    <p class="eyebrow">Catálogo</p>
+    <h1>Piezas disponibles</h1>
+    <p>
+      Filtra por categoría, subcategoría o colección y entra en cada ficha para ver fotos,
+      detalles y disponibilidad.
+    </p>
+  </div>
+
+  @if (filters$ | async; as filters) {
+    <div class="filters-panel">
+      <div class="filters-grid">
+        <label class="search-field">
+          <span>Buscar</span>
+          <input
+            type="search"
+            placeholder="Busca bolsos, neceseres, mochilas..."
+            [value]="filters.query"
+            (input)="updateQuery($any($event.target).value)"
+          />
+        </label>
+
+        <label class="select-field">
+          <span>Categoría</span>
+          <select [value]="filters.categorySlug ?? ''" (change)="selectCategory($any($event.target).value || null)">
+            <option value="">Todas</option>
+            @for (category of categories$ | async; track category.slug) {
+              <option [value]="category.slug">{{ category.name }}</option>
+            }
+          </select>
+        </label>
+
+        <label class="select-field">
+          <span>Subcategoría</span>
+          <select [value]="filters.subcategorySlug ?? ''" (change)="selectSubcategory($any($event.target).value || null)">
+            <option value="">Todas</option>
+            @for (subcategory of subcategories$ | async; track subcategory.slug) {
+              <option [value]="subcategory.slug">{{ subcategory.name }}</option>
+            }
+          </select>
+        </label>
+
+        <label class="select-field">
+          <span>Colección</span>
+          <select [value]="filters.collectionSlug ?? ''" (change)="selectCollection($any($event.target).value || null)">
+            <option value="">Todas</option>
+            @for (collection of collections$ | async; track collection.slug) {
+              <option [value]="collection.slug">{{ collection.name }}</option>
+            }
+          </select>
+        </label>
+
+        <label class="select-field compact">
+          <span>Ordenar</span>
+          <select [value]="filters.sortBy" (change)="sortCatalog($any($event.target).value)">
+            @for (option of sortOptions; track option.value) {
+              <option [value]="option.value">{{ option.label }}</option>
+            }
+          </select>
+        </label>
+      </div>
+
+      <div class="filters-meta">
+        <label class="offers-toggle">
+          <input type="checkbox" [checked]="filters.onlyOffers" (change)="toggleOffers($any($event.target).checked)" />
+          <span>Solo promociones</span>
+        </label>
+
+        <p class="catalog-summary">
+          {{ filteredCount$ | async }} piezas visibles de {{ catalogCount$ | async }}
+        </p>
+
+        @if (hasActiveFilters(filters)) {
+          <button type="button" class="clear-filters" (click)="clearFilters()">Limpiar filtros</button>
+        }
+      </div>
+    </div>
+  }
+
+  @if (loading$ | async) {
+    <div class="catalog-loading">
+      <mat-spinner diameter="32"></mat-spinner>
+      <p>Cargando catálogo...</p>
+    </div>
+  } @else {
+    <div class="product-grid">
+      @for (product of filteredProducts$ | async; track product.id) {
+        <article class="product-card">
+          <a [routerLink]="['/producto', product.slug]" class="product-image">
+            <img [src]="product.imageUrl" [alt]="product.name" />
+            @if (getBadgeLabel(product); as badgeLabel) {
+              <span [class.sold-out-badge]="product.status === 'sold_out'">{{ badgeLabel }}</span>
+            }
+          </a>
+
+          <div class="product-content">
+            <p>{{ getTaxonomyLabel(product) }}</p>
+            <h3>{{ product.name }}</h3>
+            <p class="product-description">{{ product.description }}</p>
+
+            @if (getCampaignSummary(product); as campaignSummary) {
+              <p class="campaign-summary">{{ campaignSummary }}</p>
+            }
+
+            <div class="product-footer">
+              <div class="price-stack">
+                <strong>{{ getCurrentPrice(product) | currency: 'EUR' : 'symbol' : '1.0-0' : 'es' }}</strong>
+                @if (getComparePrice(product); as comparePrice) {
+                  <span>{{ comparePrice | currency: 'EUR' : 'symbol' : '1.0-0' : 'es' }}</span>
+                }
+              </div>
+
+              <div class="product-actions">
+                <button
+                  type="button"
+                  class="icon-button share-icon-button"
+                  [attr.aria-label]="'Compartir ' + product.name"
+                  [attr.title]="'Compartir ' + product.name"
+                  (click)="shareProduct(product)">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <circle cx="18" cy="5" r="2.5"></circle>
+                    <circle cx="6" cy="12" r="2.5"></circle>
+                    <circle cx="18" cy="19" r="2.5"></circle>
+                    <path d="M8.2 10.9l7.4-4.1"></path>
+                    <path d="M8.2 13.1l7.4 4.1"></path>
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  class="add-button"
+                  [class.in-cart]="getCartQuantity(product) > 0"
+                  [disabled]="!isAvailable(product)"
+                  (click)="addToCart(product)">
+                  @if (!isAvailable(product)) {
+                    Agotado
+                  } @else if (getCartQuantity(product) > 0) {
+                    Añadido ({{ getCartQuantity(product) }})
+                  } @else {
+                    Añadir
+                  }
+                </button>
+              </div>
+            </div>
+          </div>
+        </article>
+      } @empty {
+        <div class="empty-state-block">
+          <p>No hay piezas con esos filtros.</p>
+          <button type="button" class="button ghost" (click)="clearFilters()">Ver todo el catálogo</button>
+        </div>
+      }
+    </div>
+  }
+</section>

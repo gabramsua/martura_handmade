@@ -208,6 +208,13 @@ export const createOrder = onCall<CreateOrderPayload>(async (request: CallableRe
       });
     }
 
+    const subtotal = normalizeMoney(orderItems.reduce((total, item) => total + item.lineTotal, 0));
+    const discount = discountCode
+      ? await resolveDiscountCode(transaction, discountCode, orderItems)
+      : null;
+    const shipping = subtotal > 0 ? settings.shippingPrice : 0;
+    const now = new Date();
+
     for (const [productId, quantity] of groupedQuantities.entries()) {
       const productEntry = productEntries.get(productId);
 
@@ -223,13 +230,6 @@ export const createOrder = onCall<CreateOrderPayload>(async (request: CallableRe
         status: normalizeProductStatus(productEntry.product.status, nextStock),
       });
     }
-
-    const subtotal = normalizeMoney(orderItems.reduce((total, item) => total + item.lineTotal, 0));
-    const discount = discountCode
-      ? await resolveDiscountCode(transaction, discountCode, orderItems)
-      : null;
-    const shipping = subtotal > 0 ? settings.shippingPrice : 0;
-    const now = new Date();
 
     createdOrder = {
       id: orderRef.id,
@@ -720,18 +720,29 @@ async function applyInventoryAdjustment(
   groupedQuantities: Map<string, number>,
   operation: 'reserve' | 'release',
 ): Promise<void> {
-  for (const [productId, quantity] of groupedQuantities.entries()) {
+  const productEntries = new Map<string, { ref: DocumentReference; product: StoredProduct | null }>();
+
+  for (const [productId] of groupedQuantities.entries()) {
     const ref = db.collection('products').doc(productId);
     const snapshot = await transaction.get(ref);
 
-    if (!snapshot.exists) {
+    productEntries.set(productId, {
+      ref,
+      product: snapshot.exists ? (snapshot.data() as StoredProduct) : null,
+    });
+  }
+
+  for (const [productId, quantity] of groupedQuantities.entries()) {
+    const productEntry = productEntries.get(productId);
+    const product = productEntry?.product ?? null;
+
+    if (!productEntry || !product) {
       if (operation === 'reserve') {
         throw new HttpsError('not-found', `La pieza "${productId}" ya no está disponible.`);
       }
       continue;
     }
 
-    const product = snapshot.data() as StoredProduct;
     const currentStock = typeof product.stock === 'number' ? product.stock : 0;
     const nextStock = operation === 'reserve' ? currentStock - quantity : currentStock + quantity;
 
@@ -739,7 +750,7 @@ async function applyInventoryAdjustment(
       throw new HttpsError('failed-precondition', `No queda stock suficiente de la pieza "${product.name ?? productId}".`);
     }
 
-    transaction.update(ref, {
+    transaction.update(productEntry.ref, {
       stock: nextStock,
       status: normalizeProductStatus(product.status, nextStock),
     });

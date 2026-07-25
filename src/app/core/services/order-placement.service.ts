@@ -109,6 +109,14 @@ export class OrderPlacementService {
         : null;
 
     switch (code) {
+      case 'functions/unauthenticated':
+        return new Error(
+          'El backend de pedidos está pidiendo inicio de sesión, pero el checkout ya es anónimo. Despliega la última versión de la función createOrder y vuelve a probar.',
+        );
+      case 'functions/permission-denied':
+        return new Error(
+          'El backend de pedidos está rechazando la operación. Revisa que createOrder no esté protegida por autenticación ni por reglas antiguas.',
+        );
       case 'functions/failed-precondition':
       case 'functions/not-found':
       case 'functions/invalid-argument':

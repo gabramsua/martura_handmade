@@ -1,0 +1,44 @@
+@if (settings$ | async; as settings) {
+  <section class="about-page">
+    <div class="about-intro section-heading">
+      <p class="eyebrow">Sobre mí</p>
+      <h1>{{ settings.aboutTitle }}</h1>
+      <p>{{ settings.aboutBody }}</p>
+    </div>
+
+    <div class="about-layout">
+      <article class="about-card">
+        <span>Forma de trabajo</span>
+        <strong>Piezas hechas a mano y encargos con trato directo</strong>
+        <p>
+          Cada producto nace en taller, con tejidos y acabados escogidos uno a uno. Si necesitas
+          un ajuste, una combinación concreta o un detalle especial, la sección de consultas queda
+          abierta para eso.
+        </p>
+      </article>
+
+      <article class="about-card">
+        <span>Contacto</span>
+        <strong>{{ settings.contactEmail }}</strong>
+        <p>
+          También puedes escribir desde el formulario y dejar contexto del encargo, duda o idea
+          que tengas en mente.
+        </p>
+      </article>
+
+      <article class="about-card">
+        <span>Pago activo</span>
+        <strong>Bizum al {{ settings.bizumPhone }}</strong>
+        <p>
+          El número puede cambiar desde administración y el cliente lo ve siempre actualizado al
+          terminar el pedido.
+        </p>
+      </article>
+    </div>
+
+    <div class="about-actions">
+      <a class="button primary" routerLink="/catalogo">Ir al catálogo</a>
+      <a class="button ghost" routerLink="/consultas">Hacer una consulta</a>
+    </div>
+  </section>
+}

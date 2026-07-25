@@ -3,8 +3,8 @@
   "version": "0.0.0",
   "scripts": {
     "ng": "ng",
-    "start": "ng serve",
-    "start:emulators": "ng serve --configuration development",
+    "start": "ng serve --configuration production",
+    "start:emulators": "ng serve --configuration emulators",
     "start:firebase": "ng serve --configuration production",
     "build": "ng build",
     "build:functions": "npm --prefix functions run build",

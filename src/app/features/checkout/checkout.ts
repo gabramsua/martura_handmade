@@ -1,19 +1,19 @@
 import { AsyncPipe, CurrencyPipe } from '@angular/common';
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
-import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { RouterLink } from '@angular/router';
 import { combineLatest, map, startWith } from 'rxjs';
 
 import { CartItem, CartSummary } from '../../core/models/cart.model';
 import { cartItemToOrderItem, CheckoutOrder } from '../../core/models/order.model';
-import { resolveProductPricing } from '../../core/utils/product-pricing';
 import { AlertsService } from '../../core/services/alerts.service';
 import { CampaignsService } from '../../core/services/campaigns.service';
 import { CartService } from '../../core/services/cart.service';
 import { DiscountCodesService } from '../../core/services/discount-codes.service';
 import { OrderPlacementService } from '../../core/services/order-placement.service';
 import { ShopSettingsService } from '../../core/services/shop-settings.service';
+import { resolveProductPricing } from '../../core/utils/product-pricing';
 
 @Component({
   selector: 'app-checkout',
@@ -65,35 +65,45 @@ export class Checkout {
     map(([summary, discount]) => Math.max(0, summary.total - (discount?.amount ?? 0))),
   );
 
-  lastOrder: CheckoutOrder | null = null;
-  errorMessage: string | null = null;
-  submissionMessage: string | null = null;
-  isSubmitting = false;
+  readonly lastOrder = signal<CheckoutOrder | null>(null);
+  readonly errorMessage = signal<string | null>(null);
+  readonly submissionMessage = signal<string | null>(null);
+  readonly isSubmitting = signal(false);
 
   async prepareOrder(summary: CartSummary): Promise<void> {
+    if (this.isSubmitting()) {
+      return;
+    }
+
     if (!summary.items.length) {
-      this.errorMessage = 'Tu carrito está vacío. Añade al menos una pieza antes de cerrar el pedido.';
-      await this.alertsService.error('Carrito vacío', this.errorMessage);
+      const message = 'Tu carrito está vacío. Añade al menos una pieza antes de cerrar el pedido.';
+      this.errorMessage.set(message);
+      await this.alertsService.error('Carrito vacío', message);
       return;
     }
 
     if (this.checkoutForm.invalid) {
-      this.errorMessage = this.getCheckoutValidationMessage();
+      const message = this.getCheckoutValidationMessage();
+      this.errorMessage.set(message);
       this.checkoutForm.markAllAsTouched();
-      await this.alertsService.error('Revisa el pedido', this.errorMessage);
+      await this.alertsService.error('Revisa el pedido', message);
       return;
     }
 
     try {
-      this.isSubmitting = true;
-      this.errorMessage = null;
-      this.submissionMessage = 'Validando stock, descuento y total final del pedido...';
+      this.isSubmitting.set(true);
+      this.errorMessage.set(null);
+      this.submissionMessage.set('Validando stock, descuento y total final del pedido...');
+
       const value = this.checkoutForm.getRawValue();
       const resolvedDiscount = this.resolveDiscount(summary, value.discountCode);
 
       if (value.discountCode.trim() && !resolvedDiscount) {
+        this.checkoutForm.controls.discountCode.setErrors({ invalidDiscountCode: true });
         throw new Error('Ese código no existe, no está activo o no aplica a los productos de este pedido.');
       }
+
+      this.checkoutForm.controls.discountCode.setErrors(null);
 
       const order = await this.orderPlacementService.placeOrder(
         summary,
@@ -112,20 +122,21 @@ export class Checkout {
         value.discountCode || null,
       );
 
-      this.lastOrder = order;
+      this.lastOrder.set(order);
       this.cartService.clear();
+
       await this.alertsService.success(
         'Pedido creado',
         'Tu pedido ya está registrado. Ahora puedes completar el pago por Bizum con la referencia indicada.',
       );
     } catch (error) {
-      this.errorMessage = error instanceof Error
-        ? error.message
-        : 'No se pudo guardar el pedido. Inténtalo de nuevo.';
-      await this.alertsService.error('No se pudo guardar el pedido', this.errorMessage);
+      const message = this.toErrorMessage(error);
+      this.errorMessage.set(message);
+      this.submissionMessage.set(null);
+      await this.alertsService.error('No se pudo guardar el pedido', message);
     } finally {
-      this.isSubmitting = false;
-      this.submissionMessage = null;
+      this.isSubmitting.set(false);
+      this.submissionMessage.set(null);
     }
   }
 
@@ -256,5 +267,13 @@ export class Checkout {
     }
 
     return 'Revisa los datos del pedido antes de continuar.';
+  }
+
+  private toErrorMessage(error: unknown): string {
+    if (error instanceof Error && error.message.trim()) {
+      return error.message.trim();
+    }
+
+    return 'No se pudo guardar el pedido. Inténtalo de nuevo.';
   }
 }

@@ -123,6 +123,17 @@
   gap: 8px;
 }
 
+.cart-link-disabled {
+  background: rgba(239, 225, 211, 0.36);
+  color: #b09b8d;
+  cursor: default;
+}
+
+.cart-link-disabled:hover {
+  background: rgba(239, 225, 211, 0.36);
+  color: #b09b8d;
+}
+
 .cart-link strong {
   align-items: center;
   background: var(--rose);
@@ -133,6 +144,10 @@
   height: 24px;
   justify-content: center;
   width: 24px;
+}
+
+.cart-link-disabled strong {
+  background: #d6ccc4;
 }
 
 main {
