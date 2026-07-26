@@ -15,7 +15,15 @@ import { BehaviorSubject, combineLatest, map } from 'rxjs';
 import { MOCK_PRODUCTS } from '../data/mock-products';
 import { firestoreCollections, isFirebaseConfigured } from '../firebase/firebase.config';
 import { reviveTaxonomy } from '../firebase/firestore.mappers';
-import { Product } from '../models/product.model';
+import {
+  getProductCategoryNames,
+  getProductCategorySlugs,
+  getProductCollectionNames,
+  getProductCollectionSlugs,
+  getProductSubcategoryNames,
+  getProductSubcategorySlugs,
+  Product,
+} from '../models/product.model';
 import { CatalogTaxonomy, SerializedCatalogTaxonomy, TaxonomyDraft, TaxonomyType } from '../models/taxonomy.model';
 import { slugify } from '../utils/slug';
 import { LocalStorageService } from './local-storage.service';
@@ -67,7 +75,7 @@ export class TaxonomiesService {
     ).subscribe({
       next: (items) => {
         this.categoriesSubject.next(
-          this.sortTaxonomies((items as Array<SerializedCatalogTaxonomy>).map((item) => reviveTaxonomy(item))),
+          this.sortTaxonomies('category', (items as Array<SerializedCatalogTaxonomy>).map((item) => reviveTaxonomy(item))),
         );
         completeStream();
       },
@@ -80,7 +88,7 @@ export class TaxonomiesService {
     ).subscribe({
       next: (items) => {
         this.subcategoriesSubject.next(
-          this.sortTaxonomies((items as Array<SerializedCatalogTaxonomy>).map((item) => reviveTaxonomy(item))),
+          this.sortTaxonomies('subcategory', (items as Array<SerializedCatalogTaxonomy>).map((item) => reviveTaxonomy(item))),
         );
         completeStream();
       },
@@ -93,7 +101,7 @@ export class TaxonomiesService {
     ).subscribe({
       next: (items) => {
         this.collectionsSubject.next(
-          this.sortTaxonomies((items as Array<SerializedCatalogTaxonomy>).map((item) => reviveTaxonomy(item))),
+          this.sortTaxonomies('collection', (items as Array<SerializedCatalogTaxonomy>).map((item) => reviveTaxonomy(item))),
         );
         completeStream();
       },
@@ -158,7 +166,8 @@ export class TaxonomiesService {
       ...existing,
       name: draft.name.trim(),
       slug: nextSlug,
-      position: this.normalizePosition(draft.position, existing.position),
+      position: type === 'collection' ? this.normalizePosition(draft.position, existing.position) : 0,
+      categorySlugs: type === 'subcategory' ? this.normalizeCategorySlugs(draft.categorySlugs) : [],
       updatedAt: new Date(),
     };
 
@@ -229,18 +238,25 @@ export class TaxonomiesService {
   ): CatalogTaxonomy[] {
     const entries = new Map(current.map((item) => [item.slug, item]));
     const values = type === 'category'
-      ? products.map((product) => ({ name: product.category, slug: product.categorySlug }))
+      ? products.flatMap((product) =>
+          getProductCategorySlugs(product).map((slug, index) => ({
+            name: getProductCategoryNames(product)[index] ?? product.category,
+            slug,
+          })),
+        )
       : type === 'subcategory'
-        ? products
-            .filter((product): product is Product & { subcategory: string; subcategorySlug: string } =>
-              !!product.subcategory && !!product.subcategorySlug,
-            )
-            .map((product) => ({ name: product.subcategory, slug: product.subcategorySlug }))
-        : products
-          .filter((product): product is Product & { collection: string; collectionSlug: string } =>
-            !!product.collection && !!product.collectionSlug,
+        ? products.flatMap((product) =>
+            getProductSubcategorySlugs(product).map((slug, index) => ({
+              name: getProductSubcategoryNames(product)[index] ?? product.subcategory ?? '',
+              slug,
+            })),
           )
-          .map((product) => ({ name: product.collection, slug: product.collectionSlug }));
+        : products.flatMap((product) =>
+            getProductCollectionSlugs(product).map((slug, index) => ({
+              name: getProductCollectionNames(product)[index] ?? product.collection ?? '',
+              slug,
+            })),
+          );
 
     for (const entry of values) {
       if (entries.has(entry.slug)) {
@@ -254,12 +270,13 @@ export class TaxonomiesService {
         name: entry.name,
         slug: entry.slug,
         position: nextPosition,
+        categorySlugs: [],
         createdAt: now,
         updatedAt: now,
       });
     }
 
-    return this.sortTaxonomies(Array.from(entries.values()));
+    return this.sortTaxonomies(type, Array.from(entries.values()));
   }
 
   private toTaxonomy(type: TaxonomyType, draft: TaxonomyDraft): CatalogTaxonomy {
@@ -271,7 +288,10 @@ export class TaxonomiesService {
       id: `${type}-${slug}`,
       name,
       slug,
-      position: this.normalizePosition(draft.position, this.getNextPosition(this.getSubject(type).value)),
+      position: type === 'collection'
+        ? this.normalizePosition(draft.position, this.getNextPosition(this.getSubject(type).value))
+        : 0,
+      categorySlugs: type === 'subcategory' ? this.normalizeCategorySlugs(draft.categorySlugs) : [],
       createdAt: now,
       updatedAt: now,
     };
@@ -293,7 +313,7 @@ export class TaxonomiesService {
   }
 
   private setLocalTaxonomies(type: TaxonomyType, items: CatalogTaxonomy[]): void {
-    const nextItems = this.sortTaxonomies(items);
+    const nextItems = this.sortTaxonomies(type, items);
     this.getSubject(type).next(nextItems);
     this.localStorageService.write(this.getStorageKey(type), nextItems);
   }
@@ -326,9 +346,9 @@ export class TaxonomiesService {
         : COLLECTION_STORAGE_KEY;
   }
 
-  private sortTaxonomies(items: CatalogTaxonomy[]): CatalogTaxonomy[] {
+  private sortTaxonomies(type: TaxonomyType, items: CatalogTaxonomy[]): CatalogTaxonomy[] {
     return [...items].sort((left, right) => {
-      if (left.position !== right.position) {
+      if (type === 'collection' && left.position !== right.position) {
         return left.position - right.position;
       }
 
@@ -338,6 +358,16 @@ export class TaxonomiesService {
 
   private normalizePosition(value: number | undefined, fallback: number): number {
     return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.round(value)) : fallback;
+  }
+
+  private normalizeCategorySlugs(values: string[] | undefined): string[] {
+    return Array.from(
+      new Set(
+        Array.isArray(values)
+          ? values.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+          : [],
+      ),
+    );
   }
 
   private getNextPosition(items: CatalogTaxonomy[]): number {

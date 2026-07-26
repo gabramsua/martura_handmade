@@ -7,6 +7,7 @@ import {
   CheckoutOrder,
   CustomerContact,
 } from '../models/order.model';
+import { generateOrderCode } from '../utils/order-code';
 import { CampaignsService } from './campaigns.service';
 import { ShopSettingsService } from './shop-settings.service';
 
@@ -26,7 +27,7 @@ export class CheckoutService {
     const shipping = subtotal > 0 ? this.shopSettingsService.settingsSnapshot.shippingPrice : 0;
 
     return {
-      id: `order-${Date.now()}`,
+      id: generateOrderCode(),
       customer,
       items: summary.items.map((item) =>
         cartItemToOrderItem(item, this.campaignsService.activeCampaignsSnapshot),

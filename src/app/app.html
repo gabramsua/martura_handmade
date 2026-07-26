@@ -15,7 +15,7 @@
   </nav>
 
   <div class="header-actions">
-    @if (!isPrivateArea()) {
+    @if (shouldShowCart()) {
       @if (cartItems$ | async; as totalItems) {
         @if (totalItems > 0) {
           <a class="cart-link" routerLink="/carrito" aria-label="Ver carrito">

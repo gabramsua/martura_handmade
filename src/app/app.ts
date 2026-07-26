@@ -23,6 +23,7 @@ export class App {
 
   readonly user$ = this.authService.user$;
   readonly isAdmin$ = this.authService.isAdmin$;
+  readonly isAdmin = toSignal(this.isAdmin$, { initialValue: false });
   readonly cartItems$ = this.cartService.totalItems$;
   readonly currentUrl = toSignal(
     this.router.events.pipe(
@@ -39,5 +40,9 @@ export class App {
 
   isPrivateArea(): boolean {
     return this.currentUrl().startsWith('/admin');
+  }
+
+  shouldShowCart(): boolean {
+    return !this.isAdmin() && !this.isPrivateArea();
   }
 }

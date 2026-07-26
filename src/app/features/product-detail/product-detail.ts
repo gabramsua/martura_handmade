@@ -5,7 +5,13 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { map, switchMap } from 'rxjs';
 
 import { Campaign } from '../../core/models/campaign.model';
-import { isProductAvailable, Product } from '../../core/models/product.model';
+import {
+  getProductCategoryNames,
+  getProductCollectionNames,
+  getProductSubcategoryNames,
+  isProductAvailable,
+  Product,
+} from '../../core/models/product.model';
 import { resolveProductPricing } from '../../core/utils/product-pricing';
 import { AlertsService } from '../../core/services/alerts.service';
 import { CampaignsService } from '../../core/services/campaigns.service';
@@ -103,7 +109,11 @@ export class ProductDetail {
   }
 
   getTaxonomyLabel(product: Product): string {
-    return [product.category, product.subcategory, product.collection].filter(Boolean).join(' · ');
+    return [
+      ...getProductCategoryNames(product),
+      ...getProductSubcategoryNames(product),
+      ...getProductCollectionNames(product),
+    ].join(' · ');
   }
 
   getCartQuantity(product: Product, variant?: string): number {

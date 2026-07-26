@@ -5,6 +5,7 @@ export interface CatalogTaxonomy {
   name: string;
   slug: string;
   position: number;
+  categorySlugs?: string[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -13,6 +14,7 @@ export interface TaxonomyDraft {
   name: string;
   position?: number;
   slug?: string;
+  categorySlugs?: string[];
 }
 
 export type SerializedCatalogTaxonomy = Omit<CatalogTaxonomy, 'createdAt' | 'updatedAt'> & {

@@ -7,6 +7,9 @@ import { map } from 'rxjs';
 
 import { Campaign } from '../../core/models/campaign.model';
 import {
+  getProductCategoryNames,
+  getProductCollectionNames,
+  getProductSubcategoryNames,
   isProductAvailable,
   isProductVisible,
   Product,
@@ -135,7 +138,11 @@ export class Catalog {
   }
 
   getTaxonomyLabel(product: Product): string {
-    return [product.category, product.subcategory, product.collection].filter(Boolean).join(' · ');
+    return [
+      ...getProductCategoryNames(product),
+      ...getProductSubcategoryNames(product),
+      ...getProductCollectionNames(product),
+    ].join(' · ');
   }
 
   hasActiveFilters(filters: ProductFilters): boolean {

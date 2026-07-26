@@ -1,6 +1,6 @@
 import { AsyncPipe, CurrencyPipe, DatePipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, signal } from '@angular/core';
-import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
+import { takeUntilDestroyed, toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { FirebaseError } from 'firebase/app';
@@ -25,6 +25,12 @@ import {
   OrderStatus,
 } from '../../core/models/order.model';
 import {
+  getProductCategoryNames,
+  getProductCategorySlugs,
+  getProductCollectionNames,
+  getProductCollectionSlugs,
+  getProductSubcategoryNames,
+  getProductSubcategorySlugs,
   normalizeProductCampaignIds,
   Product,
   ProductDraft,
@@ -109,6 +115,7 @@ export class Admin {
     key: 'position',
     direction: 'asc',
   });
+  readonly selectorQueries = signal<Record<string, string>>({});
   readonly adminEmailHint = environment.firebase.adminEmails[0] ?? 'correo administrador';
   readonly catalogSort$ = toObservable(this.catalogSort);
 
@@ -173,6 +180,11 @@ export class Admin {
   readonly campaigns$ = this.campaignsService.campaigns$;
   readonly discountCodes$ = this.discountCodesService.discountCodes$;
   readonly settings$ = this.shopSettingsService.settings$;
+  readonly productsSignal = toSignal(this.products$, { initialValue: [] as Product[] });
+  readonly categoriesSignal = toSignal(this.managedCategories$, { initialValue: [] as CatalogTaxonomy[] });
+  readonly subcategoriesSignal = toSignal(this.managedSubcategories$, { initialValue: [] as CatalogTaxonomy[] });
+  readonly collectionsSignal = toSignal(this.managedCollections$, { initialValue: [] as CatalogTaxonomy[] });
+  readonly campaignsSignal = toSignal(this.campaigns$, { initialValue: [] as Campaign[] });
 
   readonly orderFiltersForm = this.formBuilder.nonNullable.group({
     status: ['all' as OrderFilters['status']],
@@ -182,12 +194,14 @@ export class Admin {
   });
   readonly catalogFiltersForm = this.formBuilder.nonNullable.group({
     query: [''],
+    categorySlug: [''],
+    subcategorySlug: [''],
   });
   readonly productForm = this.formBuilder.nonNullable.group({
     name: ['', [Validators.required, Validators.minLength(2)]],
-    category: ['', [Validators.required]],
-    subcategory: [''],
-    collection: [''],
+    categorySlugs: [[] as string[]],
+    subcategorySlugs: [[] as string[]],
+    collectionSlugs: [[] as string[]],
     position: [10, [Validators.required, Validators.min(0)]],
     description: ['', [Validators.required, Validators.minLength(8)]],
     story: [''],
@@ -208,6 +222,7 @@ export class Admin {
     discountType: ['percentage' as CampaignDiscountType, [Validators.required]],
     discountValue: [10, [Validators.required, Validators.min(1)]],
     active: [true],
+    productIds: [[] as string[]],
     startsAt: [''],
     endsAt: [''],
   });
@@ -224,11 +239,12 @@ export class Admin {
   });
   readonly categoryForm = this.formBuilder.nonNullable.group({
     name: ['', [Validators.required, Validators.minLength(2)]],
-    position: [10, [Validators.required, Validators.min(0)]],
+    position: [0, [Validators.required, Validators.min(0)]],
   });
   readonly subcategoryForm = this.formBuilder.nonNullable.group({
     name: ['', [Validators.required, Validators.minLength(2)]],
-    position: [10, [Validators.required, Validators.min(0)]],
+    position: [0, [Validators.required, Validators.min(0)]],
+    categorySlugs: [[] as string[]],
   });
   readonly collectionForm = this.formBuilder.nonNullable.group({
     name: ['', [Validators.required, Validators.minLength(2)]],
@@ -292,21 +308,27 @@ export class Admin {
   ]).pipe(
     map(([products, filters, _, sort]) => {
       const query = (filters.query ?? '').trim().toLowerCase();
-      const filteredProducts = !query
-        ? products
-        : products.filter((product) =>
-            [
-              product.name,
-              product.category,
-              product.subcategory ?? '',
-              product.collection ?? '',
-              product.status,
-              product.slug,
-            ]
-              .join(' ')
-              .toLowerCase()
-              .includes(query),
-          );
+      const categorySlug = filters.categorySlug?.trim() ?? '';
+      const subcategorySlug = filters.subcategorySlug?.trim() ?? '';
+      const filteredProducts = products.filter((product) => {
+        const matchesQuery =
+          !query ||
+          [
+            product.name,
+            ...getProductCategoryNames(product),
+            ...getProductSubcategoryNames(product),
+            ...getProductCollectionNames(product),
+            product.status,
+            product.slug,
+          ]
+            .join(' ')
+            .toLowerCase()
+            .includes(query);
+        const matchesCategory = !categorySlug || getProductCategorySlugs(product).includes(categorySlug);
+        const matchesSubcategory = !subcategorySlug || getProductSubcategorySlugs(product).includes(subcategorySlug);
+
+        return matchesQuery && matchesCategory && matchesSubcategory;
+      });
 
       return [...filteredProducts].sort((left, right) =>
         this.compareCatalogProducts(left, right, sort.key, sort.direction),
@@ -318,6 +340,39 @@ export class Admin {
     this.settings$
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((settings) => this.patchSettingsForm(settings));
+
+    this.productForm.controls.categorySlugs.valueChanges
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((categorySlugs) => {
+        const allowedSubcategorySlugs = new Set(
+          this.getAvailableSubcategories(categorySlugs).map((subcategory) => subcategory.slug),
+        );
+        const nextSubcategorySlugs = this.productForm.controls.subcategorySlugs.value.filter((slug) =>
+          allowedSubcategorySlugs.has(slug),
+        );
+
+        if (nextSubcategorySlugs.length !== this.productForm.controls.subcategorySlugs.value.length) {
+          this.productForm.controls.subcategorySlugs.setValue(nextSubcategorySlugs, { emitEvent: false });
+        }
+      });
+
+    this.catalogFiltersForm.controls.categorySlug.valueChanges
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((categorySlug) => {
+        const selectedSubcategorySlug = this.catalogFiltersForm.controls.subcategorySlug.value;
+
+        if (!selectedSubcategorySlug) {
+          return;
+        }
+
+        const allowedSubcategorySlugs = new Set(
+          this.getCatalogFilterSubcategories(categorySlug).map((subcategory) => subcategory.slug),
+        );
+
+        if (!allowedSubcategorySlugs.has(selectedSubcategorySlug)) {
+          this.catalogFiltersForm.patchValue({ subcategorySlug: '' }, { emitEvent: false });
+        }
+      });
 
     this.managedCategories$
       .pipe(takeUntilDestroyed(this.destroyRef))
@@ -390,6 +445,11 @@ export class Admin {
       return;
     }
 
+    if (!this.productForm.controls.categorySlugs.value.length) {
+      this.showValidationError('Selecciona al menos una categoría para el producto.');
+      return;
+    }
+
     if (!this.galleryUrls().length) {
       this.showValidationError('Sube al menos una imagen antes de guardar el producto.');
       return;
@@ -402,6 +462,22 @@ export class Admin {
     if (conflictMessage) {
       await this.alertsService.error('Campañas incompatibles', conflictMessage);
       return;
+    }
+
+    const offerConflictMessage = this.getProductOfferConflictMessage(draft);
+
+    if (offerConflictMessage) {
+      const shouldContinue = await this.alertsService.confirm({
+        title: 'Oferta individual detectada',
+        text: offerConflictMessage,
+        confirmButtonText: 'Aplicar campaña',
+        cancelButtonText: 'Revisar producto',
+        icon: 'question',
+      });
+
+      if (!shouldContinue) {
+        return;
+      }
     }
 
     const duplicatePositionProduct = this.productsService.productsSnapshot.find(
@@ -449,9 +525,9 @@ export class Admin {
     this.galleryUrls.set(product.gallery.length ? product.gallery : [product.imageUrl]);
     this.productForm.setValue({
       name: product.name,
-      category: product.category,
-      subcategory: product.subcategory ?? '',
-      collection: product.collection ?? '',
+      categorySlugs: getProductCategorySlugs(product),
+      subcategorySlugs: getProductSubcategorySlugs(product),
+      collectionSlugs: getProductCollectionSlugs(product),
       position: product.position,
       description: product.description,
       story: product.story,
@@ -478,9 +554,9 @@ export class Admin {
 
     this.productForm.reset({
       name: '',
-      category: this.taxonomiesService.categoriesSnapshot[0]?.name ?? '',
-      subcategory: '',
-      collection: '',
+      categorySlugs: [],
+      subcategorySlugs: [],
+      collectionSlugs: [],
       position: this.getNextProductPosition(),
       description: '',
       story: '',
@@ -683,16 +759,57 @@ export class Admin {
     }
 
     const draft = this.formToCampaignDraft();
+    const selectedProductIds = this.campaignForm.controls.productIds.value;
+    const editingCampaignId = this.editingCampaignId();
+    const previewCampaign: Campaign = {
+      id: editingCampaignId ?? `preview-${slugify(draft.badge || draft.name) || 'campana'}`,
+      name: draft.name,
+      badge: draft.badge,
+      description: draft.description,
+      discountType: draft.discountType,
+      discountValue: draft.discountValue,
+      active: draft.active,
+      startsAt: draft.startsAt,
+      endsAt: draft.endsAt,
+    };
+    const offerConflictMessage = this.getCampaignOfferConflictMessage(selectedProductIds);
+
+    if (offerConflictMessage) {
+      const shouldContinue = await this.alertsService.confirm({
+        title: 'Productos con oferta individual',
+        text: offerConflictMessage,
+        confirmButtonText: 'Mover a campaña',
+        cancelButtonText: 'Revisar selección',
+        icon: 'question',
+      });
+
+      if (!shouldContinue) {
+        return;
+      }
+    }
+
+    const overlapMessage = this.getCampaignAssignmentOverlapMessage(previewCampaign, selectedProductIds);
+
+    if (overlapMessage) {
+      await this.alertsService.error('Campañas incompatibles', overlapMessage);
+      return;
+    }
 
     try {
       this.isSavingCampaign.set(true);
       this.clearMessages();
 
-      if (this.editingCampaignId()) {
-        await this.campaignsService.updateCampaign(this.editingCampaignId()!, draft);
+      const campaign = editingCampaignId
+        ? await this.campaignsService.updateCampaign(editingCampaignId, draft)
+        : await this.campaignsService.createCampaign(draft);
+
+      await this.productsService.syncCampaignAssignments(campaign.id, selectedProductIds, {
+        promoteToCampaign: true,
+      });
+
+      if (editingCampaignId) {
         this.setSuccess('Campaña actualizada correctamente.');
       } else {
-        await this.campaignsService.createCampaign(draft);
         this.setSuccess('Campaña creada correctamente.');
       }
 
@@ -713,6 +830,9 @@ export class Admin {
       discountType: campaign.discountType,
       discountValue: campaign.discountValue,
       active: campaign.active,
+      productIds: this.productsService.productsSnapshot
+        .filter((product) => normalizeProductCampaignIds(product).includes(campaign.id))
+        .map((product) => product.id),
       startsAt: this.formatDateInput(campaign.startsAt),
       endsAt: this.formatDateInput(campaign.endsAt),
     });
@@ -732,6 +852,7 @@ export class Admin {
       discountType: 'percentage',
       discountValue: 10,
       active: true,
+      productIds: [],
       startsAt: '',
       endsAt: '',
     });
@@ -752,6 +873,7 @@ export class Admin {
       this.activeCampaignActionId.set(campaignId);
       this.clearMessages();
       await this.campaignsService.deleteCampaign(campaignId);
+      await this.productsService.removeCampaignFromAllProducts(campaignId);
       this.setSuccess('Campaña eliminada correctamente.');
 
       if (this.editingCampaignId() === campaignId) {
@@ -866,7 +988,12 @@ export class Admin {
 
     if (form.invalid) {
       form.markAllAsTouched();
-      this.showValidationError('Revisa el nombre y la posición antes de guardar.');
+      this.showValidationError('Revisa el nombre antes de guardar.');
+      return;
+    }
+
+    if (type === 'subcategory' && !this.subcategoryForm.controls.categorySlugs.value.length) {
+      this.showValidationError('Selecciona al menos una categoría para la subcategoría.');
       return;
     }
 
@@ -904,9 +1031,18 @@ export class Admin {
 
   editTaxonomy(type: 'category' | 'subcategory' | 'collection', taxonomy: CatalogTaxonomy): void {
     this.setEditingTaxonomyId(type, taxonomy.id);
-    this.getTaxonomyForm(type).setValue({
+    if (type === 'subcategory') {
+      this.subcategoryForm.setValue({
+        categorySlugs: taxonomy.categorySlugs ?? [],
+        name: taxonomy.name,
+        position: 0,
+      });
+      return;
+    }
+
+    this.getTaxonomyForm(type).patchValue({
       name: taxonomy.name,
-      position: taxonomy.position,
+      position: type === 'collection' ? taxonomy.position : 0,
     });
   }
 
@@ -917,9 +1053,18 @@ export class Admin {
       this.clearMessages();
     }
 
+    if (type === 'subcategory') {
+      this.subcategoryForm.reset({
+        categorySlugs: [],
+        name: '',
+        position: 0,
+      });
+      return;
+    }
+
     this.getTaxonomyForm(type).reset({
       name: '',
-      position: this.getNextTaxonomyPosition(type),
+      position: type === 'collection' ? this.getNextTaxonomyPosition(type) : 0,
     });
   }
 
@@ -1006,7 +1151,13 @@ export class Admin {
   }
 
   getProductTaxonomy(product: Product): string {
-    return [product.category, product.subcategory, product.collection].filter(Boolean).join(' · ');
+    return [
+      this.joinLabels(getProductCategoryNames(product)),
+      this.joinLabels(getProductSubcategoryNames(product)),
+      this.joinLabels(getProductCollectionNames(product)),
+    ]
+      .filter(Boolean)
+      .join(' · ');
   }
 
   getProductPrice(product: Product): number {
@@ -1026,6 +1177,23 @@ export class Admin {
     return getOrderStatusLabel(order.status);
   }
 
+  getOrderStatusTone(status: OrderStatus): string {
+    switch (status) {
+      case 'in_factory':
+        return 'factory';
+      case 'accepted':
+        return 'accepted';
+      case 'shipped':
+        return 'shipped';
+      case 'delivered':
+        return 'delivered';
+      case 'cancelled':
+        return 'cancelled';
+      default:
+        return 'default';
+    }
+  }
+
   getCampaignLifecycleLabel(campaign: Campaign): string {
     switch (this.campaignsService.getCampaignLifecycle(campaign)) {
       case 'active':
@@ -1043,6 +1211,9 @@ export class Admin {
   private formToProductDraft(): ProductDraft {
     const value = this.productForm.getRawValue();
     const sizes = this.commaListToArray(value.sizes);
+    const selectedCategories = this.resolveTaxonomiesFromSlugs('category', value.categorySlugs);
+    const selectedSubcategories = this.resolveTaxonomiesFromSlugs('subcategory', value.subcategorySlugs);
+    const selectedCollections = this.resolveTaxonomiesFromSlugs('collection', value.collectionSlugs);
 
     return {
       name: value.name.trim(),
@@ -1056,12 +1227,18 @@ export class Admin {
           : null,
       imageUrl: this.galleryUrls()[0] ?? '',
       gallery: this.galleryUrls(),
-      category: value.category,
-      categorySlug: slugify(value.category),
-      subcategory: value.subcategory.trim() || null,
-      subcategorySlug: value.subcategory.trim() ? slugify(value.subcategory) : null,
-      collection: value.collection.trim() || null,
-      collectionSlug: value.collection.trim() ? slugify(value.collection) : null,
+      category: selectedCategories[0]?.name ?? '',
+      categorySlug: selectedCategories[0]?.slug ?? '',
+      categories: selectedCategories.map((entry) => entry.name),
+      categorySlugs: selectedCategories.map((entry) => entry.slug),
+      subcategory: selectedSubcategories[0]?.name ?? null,
+      subcategorySlug: selectedSubcategories[0]?.slug ?? null,
+      subcategories: selectedSubcategories.map((entry) => entry.name),
+      subcategorySlugs: selectedSubcategories.map((entry) => entry.slug),
+      collection: selectedCollections[0]?.name ?? null,
+      collectionSlug: selectedCollections[0]?.slug ?? null,
+      collections: selectedCollections.map((entry) => entry.name),
+      collectionSlugs: selectedCollections.map((entry) => entry.slug),
       stock: value.stock,
       sizes,
       colors: this.commaListToArray(value.colors),
@@ -1223,6 +1400,205 @@ export class Admin {
     const rightEnd = right.endsAt?.getTime() ?? Number.POSITIVE_INFINITY;
 
     return leftStart <= rightEnd && rightStart <= leftEnd;
+  }
+
+  setSelectorQuery(key: string, value: string): void {
+    this.selectorQueries.update((queries) => ({ ...queries, [key]: value }));
+  }
+
+  getSelectorQuery(key: string): string {
+    return this.selectorQueries()[key] ?? '';
+  }
+
+  toggleSelection(
+    control: { value: string[]; setValue: (value: string[]) => void },
+    value: string,
+  ): void {
+    const nextValue = control.value.includes(value)
+      ? control.value.filter((entry) => entry !== value)
+      : [...control.value, value];
+
+    control.setValue(nextValue);
+  }
+
+  isOptionSelected(values: string[] | null | undefined, value: string): boolean {
+    return Array.isArray(values) && values.includes(value);
+  }
+
+  getAvailableSubcategories(selectedCategorySlugs: string[]): CatalogTaxonomy[] {
+    const categoryFilter = new Set(selectedCategorySlugs);
+
+    return this.subcategoriesSignal().filter((subcategory) =>
+      !subcategory.categorySlugs?.length ||
+      subcategory.categorySlugs.some((slug) => categoryFilter.has(slug)),
+    );
+  }
+
+  getCatalogFilterSubcategories(categorySlug: string): CatalogTaxonomy[] {
+    return this.getAvailableSubcategories(categorySlug ? [categorySlug] : []);
+  }
+
+  getFilteredTaxonomyOptions(
+    type: 'category' | 'subcategory' | 'collection',
+    queryKey: string,
+    categorySlugs: string[] = [],
+  ): CatalogTaxonomy[] {
+    const query = this.getSelectorQuery(queryKey).trim().toLowerCase();
+    const baseOptions = type === 'category'
+      ? this.categoriesSignal()
+      : type === 'subcategory'
+        ? this.getAvailableSubcategories(categorySlugs)
+        : this.collectionsSignal();
+
+    return baseOptions.filter((item) =>
+      !query || item.name.toLowerCase().includes(query),
+    );
+  }
+
+  getFilteredProductOptions(
+    queryKey: string,
+    filters?: { categorySlug?: string; subcategorySlug?: string },
+  ): Product[] {
+    const query = this.getSelectorQuery(queryKey).trim().toLowerCase();
+
+    return [...this.productsSignal()]
+      .filter((product) => {
+        const matchesCategory =
+          !filters?.categorySlug || getProductCategorySlugs(product).includes(filters.categorySlug);
+        const matchesSubcategory =
+          !filters?.subcategorySlug || getProductSubcategorySlugs(product).includes(filters.subcategorySlug);
+        const matchesQuery =
+          !query ||
+          [
+            product.name,
+            ...getProductCategoryNames(product),
+            ...getProductSubcategoryNames(product),
+            ...getProductCollectionNames(product),
+          ]
+            .join(' ')
+            .toLowerCase()
+            .includes(query);
+
+        return matchesCategory && matchesSubcategory && matchesQuery;
+      })
+      .sort((left, right) => left.name.localeCompare(right.name, 'es'));
+  }
+
+  getSelectedProductSummary(productIds: string[]): string {
+    if (!productIds.length) {
+      return 'Sin productos seleccionados';
+    }
+
+    const names = this.productsSignal()
+      .filter((product) => productIds.includes(product.id))
+      .map((product) => product.name);
+
+    return `${productIds.length} producto(s): ${names.join(', ')}`;
+  }
+
+  getSelectedTaxonomySummary(
+    type: 'category' | 'subcategory' | 'collection',
+    slugs: string[],
+  ): string {
+    if (!slugs.length) {
+      return 'Sin selección';
+    }
+
+    const items = (type === 'category'
+      ? this.categoriesSignal()
+      : type === 'subcategory'
+        ? this.subcategoriesSignal()
+        : this.collectionsSignal())
+      .filter((item) => slugs.includes(item.slug))
+      .map((item) => item.name);
+
+    return items.join(', ');
+  }
+
+  getTaxonomyLinkedProductsCount(type: 'category' | 'subcategory' | 'collection', slug: string): number {
+    return this.productsSignal().filter((product) => {
+      if (type === 'category') {
+        return getProductCategorySlugs(product).includes(slug);
+      }
+
+      if (type === 'subcategory') {
+        return getProductSubcategorySlugs(product).includes(slug);
+      }
+
+      return getProductCollectionSlugs(product).includes(slug);
+    }).length;
+  }
+
+  getCampaignLinkedProductsCount(campaignId: string): number {
+    return this.productsSignal().filter((product) => normalizeProductCampaignIds(product).includes(campaignId)).length;
+  }
+
+  private resolveTaxonomiesFromSlugs(
+    type: 'category' | 'subcategory' | 'collection',
+    slugs: string[],
+  ): CatalogTaxonomy[] {
+    const items = type === 'category'
+      ? this.categoriesSignal()
+      : type === 'subcategory'
+        ? this.subcategoriesSignal()
+        : this.collectionsSignal();
+
+    return slugs
+      .map((slug) => items.find((item) => item.slug === slug) ?? null)
+      .filter((item): item is CatalogTaxonomy => !!item);
+  }
+
+  private getCampaignOfferConflictMessage(productIds: string[]): string | null {
+    const conflictedProducts = this.productsSignal().filter(
+      (product) =>
+        productIds.includes(product.id) &&
+        product.pricingMode === 'individual_offer' &&
+        typeof product.offerPrice === 'number' &&
+        product.offerPrice > 0,
+    );
+
+    if (!conflictedProducts.length) {
+      return null;
+    }
+
+    return `Estos productos tienen una oferta individual activa: ${conflictedProducts.map((product) => product.name).join(', ')}. Si continúas, pasarán a modo campaña.`;
+  }
+
+  private getCampaignAssignmentOverlapMessage(campaign: Campaign, productIds: string[]): string | null {
+    for (const product of this.productsSignal()) {
+      if (!productIds.includes(product.id)) {
+        continue;
+      }
+
+      const overlappingCampaign = normalizeProductCampaignIds(product)
+        .filter((campaignId) => campaignId !== campaign.id)
+        .map((campaignId) => this.campaignsService.getCampaignById(campaignId))
+        .filter((entry): entry is Campaign => !!entry)
+        .find((existingCampaign) => this.doCampaignsOverlap(campaign, existingCampaign));
+
+      if (overlappingCampaign) {
+        return `El producto "${product.name}" ya está enlazado a la campaña "${overlappingCampaign.name}" y sus fechas se solapan con "${campaign.name}".`;
+      }
+    }
+
+    return null;
+  }
+
+  private getProductOfferConflictMessage(draft: ProductDraft): string | null {
+    if (
+      draft.pricingMode !== 'campaign' ||
+      typeof draft.offerPrice !== 'number' ||
+      draft.offerPrice <= 0 ||
+      !draft.campaignIds.length
+    ) {
+      return null;
+    }
+
+    return `El producto "${draft.name}" conserva una oferta individual guardada. Si continúas, la campaña tendrá prioridad mientras el modo de precio siga en campaña.`;
+  }
+
+  private joinLabels(values: string[]): string {
+    return values.join(', ');
   }
 
   private getTaxonomyForm(type: 'category' | 'subcategory' | 'collection') {

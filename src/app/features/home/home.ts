@@ -3,7 +3,12 @@ import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '
 import { RouterLink } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 
-import { Product } from '../../core/models/product.model';
+import {
+  getProductCategoryNames,
+  getProductCollectionNames,
+  getProductSubcategoryNames,
+  Product,
+} from '../../core/models/product.model';
 import { resolveProductPricing } from '../../core/utils/product-pricing';
 import { AlertsService } from '../../core/services/alerts.service';
 import { CampaignsService } from '../../core/services/campaigns.service';
@@ -102,6 +107,10 @@ export class Home {
   }
 
   getTaxonomyLabel(product: Product): string {
-    return [product.category, product.subcategory, product.collection].filter(Boolean).join(' · ');
+    return [
+      ...getProductCategoryNames(product),
+      ...getProductSubcategoryNames(product),
+      ...getProductCollectionNames(product),
+    ].join(' · ');
   }
 }

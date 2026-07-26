@@ -15,10 +15,16 @@ export interface Product {
   gallery: string[];
   category: string;
   categorySlug: string;
+  categories?: string[];
+  categorySlugs?: string[];
   subcategory: string | null;
   subcategorySlug: string | null;
+  subcategories?: string[];
+  subcategorySlugs?: string[];
   collection: string | null;
   collectionSlug: string | null;
+  collections?: string[];
+  collectionSlugs?: string[];
   stock: number;
   sizes: string[];
   colors: string[];
@@ -93,4 +99,72 @@ export function normalizePricingMode(
   }
 
   return 'regular';
+}
+
+export function getProductCategorySlugs(
+  product: Pick<Product, 'categorySlug' | 'categorySlugs'>,
+): string[] {
+  return normalizeTaxonomySlugs(product.categorySlugs, product.categorySlug);
+}
+
+export function getProductCategoryNames(
+  product: Pick<Product, 'category' | 'categories'>,
+): string[] {
+  return normalizeTaxonomyNames(product.categories, product.category);
+}
+
+export function getProductSubcategorySlugs(
+  product: Pick<Product, 'subcategorySlug' | 'subcategorySlugs'>,
+): string[] {
+  return normalizeTaxonomySlugs(product.subcategorySlugs, product.subcategorySlug);
+}
+
+export function getProductSubcategoryNames(
+  product: Pick<Product, 'subcategory' | 'subcategories'>,
+): string[] {
+  return normalizeTaxonomyNames(product.subcategories, product.subcategory);
+}
+
+export function getProductCollectionSlugs(
+  product: Pick<Product, 'collectionSlug' | 'collectionSlugs'>,
+): string[] {
+  return normalizeTaxonomySlugs(product.collectionSlugs, product.collectionSlug);
+}
+
+export function getProductCollectionNames(
+  product: Pick<Product, 'collection' | 'collections'>,
+): string[] {
+  return normalizeTaxonomyNames(product.collections, product.collection);
+}
+
+function normalizeTaxonomySlugs(
+  values: string[] | null | undefined,
+  legacyValue: string | null | undefined,
+): string[] {
+  return Array.from(
+    new Set(
+      [
+        ...(Array.isArray(values)
+          ? values.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+          : []),
+        ...(typeof legacyValue === 'string' && legacyValue.trim().length > 0 ? [legacyValue.trim()] : []),
+      ],
+    ),
+  );
+}
+
+function normalizeTaxonomyNames(
+  values: string[] | null | undefined,
+  legacyValue: string | null | undefined,
+): string[] {
+  return Array.from(
+    new Set(
+      [
+        ...(Array.isArray(values)
+          ? values.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+          : []),
+        ...(typeof legacyValue === 'string' && legacyValue.trim().length > 0 ? [legacyValue.trim()] : []),
+      ],
+    ),
+  );
 }

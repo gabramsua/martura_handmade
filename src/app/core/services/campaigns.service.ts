@@ -87,22 +87,23 @@ export class CampaignsService {
     return getCampaignLifecycle(campaign);
   }
 
-  async createCampaign(draft: CampaignDraft): Promise<void> {
+  async createCampaign(draft: CampaignDraft): Promise<Campaign> {
     const campaign = this.draftToCampaign(draft);
 
     if (isFirebaseConfigured && this.firestore) {
       await setDoc(this.getCampaignDoc(campaign.id), campaign);
-      return;
+      return campaign;
     }
 
     this.setCampaigns([campaign, ...this.campaignsSubject.value]);
+    return campaign;
   }
 
-  async updateCampaign(campaignId: string, draft: CampaignDraft): Promise<void> {
+  async updateCampaign(campaignId: string, draft: CampaignDraft): Promise<Campaign> {
     const existingCampaign = this.campaignsSubject.value.find((campaign) => campaign.id === campaignId);
 
     if (!existingCampaign) {
-      return;
+      throw new Error('No se encontró la campaña que intentas editar.');
     }
 
     const nextCampaign = {
@@ -112,7 +113,7 @@ export class CampaignsService {
 
     if (isFirebaseConfigured && this.firestore) {
       await setDoc(this.getCampaignDoc(campaignId), nextCampaign);
-      return;
+      return nextCampaign;
     }
 
     this.setCampaigns(
@@ -120,6 +121,8 @@ export class CampaignsService {
         campaign.id === campaignId ? nextCampaign : campaign,
       ),
     );
+
+    return nextCampaign;
   }
 
   async deleteCampaign(campaignId: string): Promise<void> {

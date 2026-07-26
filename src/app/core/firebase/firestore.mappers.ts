@@ -2,6 +2,12 @@ import { Campaign } from '../models/campaign.model';
 import { CustomerProfile } from '../models/customer.model';
 import { CheckoutOrder, normalizeOrderStatus } from '../models/order.model';
 import {
+  getProductCategoryNames,
+  getProductCategorySlugs,
+  getProductCollectionNames,
+  getProductCollectionSlugs,
+  getProductSubcategoryNames,
+  getProductSubcategorySlugs,
   normalizePricingMode,
   normalizeProductCampaignIds,
   normalizeProductStatus,
@@ -48,15 +54,47 @@ export function reviveProduct(product: WithUnknownProductDate): Product {
     typeof product.imageUrl === 'string' && product.imageUrl.trim().length > 0
       ? product.imageUrl
       : gallery[0] ?? '';
+  const categoryNames = getProductCategoryNames({
+    category: typeof product.category === 'string' ? product.category : '',
+    categories: Array.isArray(product.categories) ? product.categories : [],
+  });
+  const categorySlugs = getProductCategorySlugs({
+    categorySlug: typeof product.categorySlug === 'string' ? product.categorySlug : '',
+    categorySlugs: Array.isArray(product.categorySlugs) ? product.categorySlugs : [],
+  });
+  const subcategoryNames = getProductSubcategoryNames({
+    subcategory: typeof product.subcategory === 'string' ? product.subcategory : null,
+    subcategories: Array.isArray(product.subcategories) ? product.subcategories : [],
+  });
+  const subcategorySlugs = getProductSubcategorySlugs({
+    subcategorySlug: typeof product.subcategorySlug === 'string' ? product.subcategorySlug : null,
+    subcategorySlugs: Array.isArray(product.subcategorySlugs) ? product.subcategorySlugs : [],
+  });
+  const collectionNames = getProductCollectionNames({
+    collection: typeof product.collection === 'string' ? product.collection : null,
+    collections: Array.isArray(product.collections) ? product.collections : [],
+  });
+  const collectionSlugs = getProductCollectionSlugs({
+    collectionSlug: typeof product.collectionSlug === 'string' ? product.collectionSlug : null,
+    collectionSlugs: Array.isArray(product.collectionSlugs) ? product.collectionSlugs : [],
+  });
 
   return {
     ...product,
     imageUrl,
     gallery: gallery.length > 0 ? gallery : imageUrl ? [imageUrl] : [],
-    subcategory: product.subcategory ?? null,
-    subcategorySlug: product.subcategorySlug ?? null,
-    collection: product.collection ?? null,
-    collectionSlug: product.collectionSlug ?? null,
+    category: categoryNames[0] ?? (typeof product.category === 'string' ? product.category : ''),
+    categorySlug: categorySlugs[0] ?? (typeof product.categorySlug === 'string' ? product.categorySlug : ''),
+    categories: categoryNames,
+    categorySlugs,
+    subcategory: subcategoryNames[0] ?? null,
+    subcategorySlug: subcategorySlugs[0] ?? null,
+    subcategories: subcategoryNames,
+    subcategorySlugs,
+    collection: collectionNames[0] ?? null,
+    collectionSlug: collectionSlugs[0] ?? null,
+    collections: collectionNames,
+    collectionSlugs,
     campaignIds,
     position: typeof product.position === 'number' ? product.position : 0,
     pricingMode: normalizePricingMode({
@@ -127,6 +165,9 @@ export function reviveTaxonomy(taxonomy: WithUnknownTaxonomyDates): CatalogTaxon
   return {
     ...taxonomy,
     position: typeof taxonomy.position === 'number' ? taxonomy.position : 0,
+    categorySlugs: Array.isArray(taxonomy.categorySlugs)
+      ? taxonomy.categorySlugs.filter((slug): slug is string => typeof slug === 'string' && slug.trim().length > 0)
+      : [],
     createdAt: normalizeDate(taxonomy.createdAt),
     updatedAt: normalizeDate(taxonomy.updatedAt),
   };

@@ -15,6 +15,8 @@ const ADMIN_EMAILS = (
   .split(',')
   .map((email) => email.trim().toLowerCase())
   .filter(Boolean);
+const ORDER_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const ORDER_CODE_LENGTH = 8;
 
 type DeliveryMethod = 'shipping';
 type ProductStatus = 'active' | 'sold_out' | 'hidden';
@@ -156,7 +158,7 @@ export const createOrder = onCall<CreateOrderPayload>(async (request: CallableRe
   const items = normalizeRequestedItems(request.data?.items);
   const discountCode = sanitizeString(request.data?.discountCode).toUpperCase() || null;
   const groupedQuantities = groupRequestedItems(items);
-  const orderRef = db.collection('orders').doc();
+  const orderRef = db.collection('orders').doc(generateOrderCode());
   let createdOrder: CheckoutOrder | null = null;
 
   await db.runTransaction(async (transaction: Transaction) => {
@@ -388,6 +390,17 @@ function requireText(value: unknown, message: string): string {
 
 function sanitizeString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
+}
+
+function generateOrderCode(length = ORDER_CODE_LENGTH): string {
+  let code = '';
+
+  for (let index = 0; index < length; index += 1) {
+    const characterIndex = Math.floor(Math.random() * ORDER_CODE_ALPHABET.length);
+    code += ORDER_CODE_ALPHABET[characterIndex];
+  }
+
+  return code;
 }
 
 function normalizeTargetStatus(status: unknown): OrderStatus {

@@ -14,6 +14,12 @@ import { BehaviorSubject, combineLatest, map, Observable } from 'rxjs';
 
 import { MOCK_PRODUCTS } from '../data/mock-products';
 import {
+  getProductCategoryNames,
+  getProductCategorySlugs,
+  getProductCollectionNames,
+  getProductCollectionSlugs,
+  getProductSubcategoryNames,
+  getProductSubcategorySlugs,
   isProductAvailable,
   isProductVisible,
   normalizePricingMode,
@@ -73,10 +79,12 @@ export class ProductsService {
     map(([taxonomies, products]) =>
       this.mergeCatalogTaxonomies(
         taxonomies,
-        this.getPublicCatalogProducts(products).map((product) => ({
-          slug: product.categorySlug,
-          name: product.category,
-        })),
+        this.getPublicCatalogProducts(products).flatMap((product) =>
+          getProductCategorySlugs(product).map((slug, index) => ({
+            slug,
+            name: getProductCategoryNames(product)[index] ?? product.category,
+          })),
+        ),
       ),
     ),
   );
@@ -84,15 +92,12 @@ export class ProductsService {
     map(([taxonomies, products]) =>
       this.mergeCatalogTaxonomies(
         taxonomies,
-        this.getPublicCatalogProducts(products)
-          .filter(
-            (product): product is Product & { subcategory: string; subcategorySlug: string } =>
-              !!product.subcategorySlug && !!product.subcategory,
-          )
-          .map((product) => ({
-            slug: product.subcategorySlug,
-            name: product.subcategory,
+        this.getPublicCatalogProducts(products).flatMap((product) =>
+          getProductSubcategorySlugs(product).map((slug, index) => ({
+            slug,
+            name: getProductSubcategoryNames(product)[index] ?? product.subcategory ?? '',
           })),
+        ),
       ),
     ),
   );
@@ -100,15 +105,12 @@ export class ProductsService {
     map(([taxonomies, products]) =>
       this.mergeCatalogTaxonomies(
         taxonomies,
-        this.getPublicCatalogProducts(products)
-          .filter(
-            (product): product is Product & { collection: string; collectionSlug: string } =>
-              !!product.collectionSlug && !!product.collection,
-          )
-          .map((product) => ({
-            slug: product.collectionSlug,
-            name: product.collection,
+        this.getPublicCatalogProducts(products).flatMap((product) =>
+          getProductCollectionSlugs(product).map((slug, index) => ({
+            slug,
+            name: getProductCollectionNames(product)[index] ?? product.collection ?? '',
           })),
+        ),
       ),
     ),
   );
@@ -278,10 +280,10 @@ export class ProductsService {
   ): Promise<void> {
     const impactedProducts = this.productsSubject.value.filter((product) =>
       type === 'category'
-        ? product.categorySlug === previousSlug
+        ? getProductCategorySlugs(product).includes(previousSlug)
         : type === 'subcategory'
-          ? product.subcategorySlug === previousSlug
-          : product.collectionSlug === previousSlug,
+          ? getProductSubcategorySlugs(product).includes(previousSlug)
+          : getProductCollectionSlugs(product).includes(previousSlug),
     );
 
     if (!impactedProducts.length) {
@@ -289,33 +291,54 @@ export class ProductsService {
     }
 
     const nextProducts = this.productsSubject.value.map((product) => {
-      const matchesTaxonomy = type === 'category'
-        ? product.categorySlug === previousSlug
+      const currentNames = type === 'category'
+        ? getProductCategoryNames(product)
         : type === 'subcategory'
-          ? product.subcategorySlug === previousSlug
-        : product.collectionSlug === previousSlug;
+          ? getProductSubcategoryNames(product)
+          : getProductCollectionNames(product);
+      const currentSlugs = type === 'category'
+        ? getProductCategorySlugs(product)
+        : type === 'subcategory'
+          ? getProductSubcategorySlugs(product)
+          : getProductCollectionSlugs(product);
+      const matchesTaxonomy = currentSlugs.includes(previousSlug);
 
       if (!matchesTaxonomy) {
         return product;
       }
 
-      return type === 'category'
-        ? {
-            ...product,
-            category: nextValue.name,
-            categorySlug: nextValue.slug,
-          }
-        : type === 'subcategory'
-          ? {
-              ...product,
-              subcategory: nextValue.name,
-              subcategorySlug: nextValue.slug,
-            }
-        : {
-            ...product,
-            collection: nextValue.name,
-            collectionSlug: nextValue.slug,
-          };
+      const nextNames = currentNames.map((name, index) =>
+        currentSlugs[index] === previousSlug ? nextValue.name : name,
+      );
+      const nextSlugs = currentSlugs.map((slug) => (slug === previousSlug ? nextValue.slug : slug));
+
+      if (type === 'category') {
+        return {
+          ...product,
+          category: nextNames[0] ?? product.category,
+          categorySlug: nextSlugs[0] ?? product.categorySlug,
+          categories: nextNames,
+          categorySlugs: nextSlugs,
+        };
+      }
+
+      if (type === 'subcategory') {
+        return {
+          ...product,
+          subcategory: nextNames[0] ?? null,
+          subcategorySlug: nextSlugs[0] ?? null,
+          subcategories: nextNames,
+          subcategorySlugs: nextSlugs,
+        };
+      }
+
+      return {
+        ...product,
+        collection: nextNames[0] ?? null,
+        collectionSlug: nextSlugs[0] ?? null,
+        collections: nextNames,
+        collectionSlugs: nextSlugs,
+      };
     });
 
     if (isFirebaseConfigured && this.firestore) {
@@ -323,10 +346,10 @@ export class ProductsService {
 
       for (const product of nextProducts) {
         const matchesTaxonomy = type === 'category'
-          ? product.categorySlug === nextValue.slug
+          ? getProductCategorySlugs(product).includes(nextValue.slug)
           : type === 'subcategory'
-            ? product.subcategorySlug === nextValue.slug
-          : product.collectionSlug === nextValue.slug;
+            ? getProductSubcategorySlugs(product).includes(nextValue.slug)
+            : getProductCollectionSlugs(product).includes(nextValue.slug);
 
         if (!matchesTaxonomy) {
           continue;
@@ -419,6 +442,47 @@ export class ProductsService {
     await this.adjustInventory(orderItems, 'release');
   }
 
+  async syncCampaignAssignments(
+    campaignId: string,
+    productIds: string[],
+    options?: { promoteToCampaign?: boolean },
+  ): Promise<void> {
+    const targetProductIds = new Set(productIds);
+    const nextProducts = this.productsSubject.value.map((product) => {
+      const currentCampaignIds = normalizeProductCampaignIds(product);
+      const hadCampaign = currentCampaignIds.includes(campaignId);
+      const shouldHaveCampaign = targetProductIds.has(product.id);
+      const nextCampaignIds = shouldHaveCampaign
+        ? Array.from(new Set([...currentCampaignIds, campaignId]))
+        : currentCampaignIds.filter((currentId) => currentId !== campaignId);
+
+      let pricingMode = product.pricingMode;
+
+      if (shouldHaveCampaign && options?.promoteToCampaign) {
+        pricingMode = 'campaign';
+      } else if (
+        hadCampaign &&
+        !shouldHaveCampaign &&
+        product.pricingMode === 'campaign' &&
+        nextCampaignIds.length === 0
+      ) {
+        pricingMode = product.offerPrice !== null ? 'individual_offer' : 'regular';
+      }
+
+      return {
+        ...product,
+        pricingMode,
+        campaignIds: nextCampaignIds,
+      };
+    });
+
+    await this.persistProducts(nextProducts);
+  }
+
+  async removeCampaignFromAllProducts(campaignId: string): Promise<void> {
+    await this.syncCampaignAssignments(campaignId, []);
+  }
+
   private async adjustInventory(orderItems: OrderItem[], operation: 'reserve' | 'release'): Promise<void> {
     const orderedQuantityByProduct = orderItems.reduce<Record<string, number>>((accumulator, item) => {
       accumulator[item.productId] = (accumulator[item.productId] ?? 0) + item.quantity;
@@ -471,10 +535,12 @@ export class ProductsService {
 
     return this.sortProducts(
       products.filter((product) => {
-        const matchesCategory = !filters.categorySlug || product.categorySlug === filters.categorySlug;
-        const matchesSubcategory = !filters.subcategorySlug || product.subcategorySlug === filters.subcategorySlug;
+        const matchesCategory =
+          !filters.categorySlug || getProductCategorySlugs(product).includes(filters.categorySlug);
+        const matchesSubcategory =
+          !filters.subcategorySlug || getProductSubcategorySlugs(product).includes(filters.subcategorySlug);
         const matchesCollection =
-          !filters.collectionSlug || product.collectionSlug === filters.collectionSlug;
+          !filters.collectionSlug || getProductCollectionSlugs(product).includes(filters.collectionSlug);
         const matchesOffer =
           !filters.onlyOffers ||
           resolveProductPricing(product, this.campaignsService.activeCampaignsSnapshot).hasDiscount;
@@ -482,8 +548,9 @@ export class ProductsService {
           !query ||
           product.name.toLowerCase().includes(query) ||
           product.description.toLowerCase().includes(query) ||
-          product.category.toLowerCase().includes(query) ||
-          (product.collection ?? '').toLowerCase().includes(query);
+          getProductCategoryNames(product).some((name) => name.toLowerCase().includes(query)) ||
+          getProductSubcategoryNames(product).some((name) => name.toLowerCase().includes(query)) ||
+          getProductCollectionNames(product).some((name) => name.toLowerCase().includes(query));
 
         return matchesCategory && matchesSubcategory && matchesCollection && matchesOffer && matchesQuery;
       }),
@@ -496,6 +563,48 @@ export class ProductsService {
     const imageUrl = gallery[0] ?? draft.imageUrl.trim();
     const slug = this.buildProductSlug(draft.slug || draft.name, existingProduct?.id);
     const normalizedStatus = normalizeProductStatus(draft.status, draft.stock);
+    const categoryNames = Array.from(
+      new Set(
+        Array.isArray(draft.categories)
+          ? draft.categories.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+          : [],
+      ),
+    );
+    const categorySlugs = Array.from(
+      new Set(
+        Array.isArray(draft.categorySlugs)
+          ? draft.categorySlugs.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+          : [],
+      ),
+    );
+    const subcategoryNames = Array.from(
+      new Set(
+        Array.isArray(draft.subcategories)
+          ? draft.subcategories.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+          : [],
+      ),
+    );
+    const subcategorySlugs = Array.from(
+      new Set(
+        Array.isArray(draft.subcategorySlugs)
+          ? draft.subcategorySlugs.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+          : [],
+      ),
+    );
+    const collectionNames = Array.from(
+      new Set(
+        Array.isArray(draft.collections)
+          ? draft.collections.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+          : [],
+      ),
+    );
+    const collectionSlugs = Array.from(
+      new Set(
+        Array.isArray(draft.collectionSlugs)
+          ? draft.collectionSlugs.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+          : [],
+      ),
+    );
 
     return {
       id: existingProduct?.id ?? `prd-${slug}-${Date.now()}`,
@@ -508,12 +617,18 @@ export class ProductsService {
       offerPrice: draft.offerPrice,
       imageUrl,
       gallery,
-      category: draft.category,
-      categorySlug: draft.categorySlug || slugify(draft.category),
-      subcategory: draft.subcategory,
-      subcategorySlug: draft.subcategory ? (draft.subcategorySlug || slugify(draft.subcategory)) : null,
-      collection: draft.collection,
-      collectionSlug: draft.collectionSlug,
+      category: categoryNames[0] ?? draft.category,
+      categorySlug: categorySlugs[0] ?? draft.categorySlug,
+      categories: categoryNames,
+      categorySlugs,
+      subcategory: subcategoryNames[0] ?? null,
+      subcategorySlug: subcategorySlugs[0] ?? null,
+      subcategories: subcategoryNames,
+      subcategorySlugs,
+      collection: collectionNames[0] ?? null,
+      collectionSlug: collectionSlugs[0] ?? null,
+      collections: collectionNames,
+      collectionSlugs,
       stock: draft.stock,
       sizes: draft.sizes,
       colors: draft.colors,
@@ -529,6 +644,21 @@ export class ProductsService {
     const nextProducts = this.sortStoredProducts(products);
     this.productsSubject.next(nextProducts);
     this.localStorageService.write(PRODUCTS_STORAGE_KEY, nextProducts);
+  }
+
+  private async persistProducts(products: Product[]): Promise<void> {
+    if (isFirebaseConfigured && this.firestore) {
+      const batch = writeBatch(this.firestore);
+
+      for (const product of products) {
+        batch.set(this.getProductDoc(product.id), product);
+      }
+
+      await batch.commit();
+      return;
+    }
+
+    this.setProducts(products);
   }
 
   private getPublicCatalogProducts(products: Product[]): Product[] {

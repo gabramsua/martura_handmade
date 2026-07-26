@@ -99,11 +99,14 @@
                   </small>
                 </span>
                 <span>
-                  <mark class="status-badge">{{ getOrderStatusLabel(order) }}</mark>
+                  <mark
+                    class="status-badge order-status-badge"
+                    [attr.data-status]="getOrderStatusTone(order.status)">{{ getOrderStatusLabel(order) }}</mark>
                 </span>
               </summary>
 
-              <div class="order-accordion-body">
+              <div class="order-accordion-content">
+                <div class="order-accordion-body">
                 <div class="order-grid">
                   <div>
                     <span>Cliente</span>
@@ -140,7 +143,7 @@
                   }
                 </div>
 
-                <div class="order-actions">
+                  <div class="order-actions">
                   @for (action of getOrderProgressActions(order); track action.status) {
                     <button
                       type="button"
@@ -159,6 +162,7 @@
                       Cancelar
                     </button>
                   }
+                  </div>
                 </div>
               </div>
             </details>
@@ -178,6 +182,18 @@
           </div>
           <form class="toolbar" [formGroup]="catalogFiltersForm">
             <input type="search" formControlName="query" placeholder="Buscar producto, estado o taxonomía" />
+            <select formControlName="categorySlug">
+              <option value="">Todas las categorías</option>
+              @for (category of managedCategories$ | async; track category.id) {
+                <option [value]="category.slug">{{ category.name }}</option>
+              }
+            </select>
+            <select formControlName="subcategorySlug">
+              <option value="">Todas las subcategorías</option>
+              @for (subcategory of getCatalogFilterSubcategories(catalogFiltersForm.controls.categorySlug.value); track subcategory.id) {
+                <option [value]="subcategory.slug">{{ subcategory.name }}</option>
+              }
+            </select>
           </form>
         </div>
 
@@ -261,27 +277,78 @@
           </label>
 
           <label>
-            Categoría
-            <select formControlName="category">
-              @for (category of categories$ | async; track category.slug) {
-                <option [value]="category.name">{{ category.name }}</option>
-              }
-            </select>
+            Categorías
+            <div class="selector-panel">
+              <input
+                type="search"
+                placeholder="Buscar categorías"
+                [value]="getSelectorQuery('product-categories')"
+                (input)="setSelectorQuery('product-categories', $any($event.target).value)" />
+              <div class="selector-list">
+                @for (category of getFilteredTaxonomyOptions('category', 'product-categories'); track category.id) {
+                  <label class="selector-option">
+                    <input
+                      type="checkbox"
+                      [checked]="isOptionSelected(productForm.controls.categorySlugs.value, category.slug)"
+                      (change)="toggleSelection(productForm.controls.categorySlugs, category.slug)" />
+                    <span>{{ category.name }}</span>
+                  </label>
+                } @empty {
+                  <p class="empty-state">No hay categorías con ese filtro.</p>
+                }
+              </div>
+              <small>{{ getSelectedTaxonomySummary('category', productForm.controls.categorySlugs.value) }}</small>
+            </div>
           </label>
 
           <label>
-            Subcategoría
-            <input type="text" formControlName="subcategory" placeholder="Opcional" />
+            Subcategorías
+            <div class="selector-panel">
+              <input
+                type="search"
+                placeholder="Buscar subcategorías"
+                [value]="getSelectorQuery('product-subcategories')"
+                (input)="setSelectorQuery('product-subcategories', $any($event.target).value)" />
+              <div class="selector-list">
+                @for (subcategory of getFilteredTaxonomyOptions('subcategory', 'product-subcategories', productForm.controls.categorySlugs.value); track subcategory.id) {
+                  <label class="selector-option">
+                    <input
+                      type="checkbox"
+                      [checked]="isOptionSelected(productForm.controls.subcategorySlugs.value, subcategory.slug)"
+                      (change)="toggleSelection(productForm.controls.subcategorySlugs, subcategory.slug)" />
+                    <span>{{ subcategory.name }}</span>
+                  </label>
+                } @empty {
+                  <p class="empty-state">No hay subcategorías compatibles.</p>
+                }
+              </div>
+              <small>{{ getSelectedTaxonomySummary('subcategory', productForm.controls.subcategorySlugs.value) }}</small>
+            </div>
           </label>
 
           <label>
-            Colección
-            <select formControlName="collection">
-              <option value="">Sin colección</option>
-              @for (collection of collections$ | async; track collection.slug) {
-                <option [value]="collection.name">{{ collection.name }}</option>
-              }
-            </select>
+            Colecciones
+            <div class="selector-panel">
+              <input
+                type="search"
+                placeholder="Buscar colecciones"
+                [value]="getSelectorQuery('product-collections')"
+                (input)="setSelectorQuery('product-collections', $any($event.target).value)" />
+              <div class="selector-list">
+                @for (collection of getFilteredTaxonomyOptions('collection', 'product-collections'); track collection.id) {
+                  <label class="selector-option">
+                    <input
+                      type="checkbox"
+                      [checked]="isOptionSelected(productForm.controls.collectionSlugs.value, collection.slug)"
+                      (change)="toggleSelection(productForm.controls.collectionSlugs, collection.slug)" />
+                    <span>{{ collection.name }}</span>
+                  </label>
+                } @empty {
+                  <p class="empty-state">No hay colecciones con ese filtro.</p>
+                }
+              </div>
+              <small>{{ getSelectedTaxonomySummary('collection', productForm.controls.collectionSlugs.value) }}</small>
+            </div>
           </label>
 
           <label>
@@ -310,11 +377,26 @@
 
           <label class="wide">
             Campañas
-            <select formControlName="campaignIds" multiple>
-              @for (campaign of campaigns$ | async; track campaign.id) {
-                <option [value]="campaign.id">{{ campaign.name }}</option>
-              }
-            </select>
+            <div class="selector-panel">
+              <input
+                type="search"
+                placeholder="Buscar campañas"
+                [value]="getSelectorQuery('product-campaigns')"
+                (input)="setSelectorQuery('product-campaigns', $any($event.target).value)" />
+              <div class="selector-list">
+                @for (campaign of campaignsSignal(); track campaign.id) {
+                  @if (!getSelectorQuery('product-campaigns') || campaign.name.toLowerCase().includes(getSelectorQuery('product-campaigns').toLowerCase()) || campaign.badge.toLowerCase().includes(getSelectorQuery('product-campaigns').toLowerCase())) {
+                    <label class="selector-option">
+                      <input
+                        type="checkbox"
+                        [checked]="isOptionSelected(productForm.controls.campaignIds.value, campaign.id)"
+                        (change)="toggleSelection(productForm.controls.campaignIds, campaign.id)" />
+                      <span>{{ campaign.name }} <small>{{ campaign.badge }}</small></span>
+                    </label>
+                  }
+                }
+              </div>
+            </div>
           </label>
 
           <label>
@@ -402,9 +484,11 @@
             </div>
           </div>
 
-          <form class="mini-form" [formGroup]="categoryForm" (ngSubmit)="saveTaxonomy('category')">
-            <input type="text" formControlName="name" placeholder="Nombre" />
-            <input type="number" formControlName="position" placeholder="Orden" />
+          <form class="mini-form taxonomy-form" [formGroup]="categoryForm" (ngSubmit)="saveTaxonomy('category')">
+            <label>
+              Nombre
+              <input type="text" formControlName="name" placeholder="Ej. Bolsos" />
+            </label>
             <div class="form-actions">
               <button type="submit" class="button primary" [disabled]="isSavingCategory()">Guardar</button>
               <button type="button" class="button ghost" (click)="resetTaxonomyForm('category')">Limpiar</button>
@@ -416,7 +500,7 @@
               <div class="stack-row">
                 <div>
                   <strong>{{ item.name }}</strong>
-                  <small>#{{ item.position }}</small>
+                  <small>{{ getTaxonomyLinkedProductsCount('category', item.slug) }} productos</small>
                 </div>
                 <div class="row-actions">
                   <button type="button" class="button ghost" (click)="editTaxonomy('category', item)">Editar</button>
@@ -435,9 +519,31 @@
             </div>
           </div>
 
-          <form class="mini-form" [formGroup]="subcategoryForm" (ngSubmit)="saveTaxonomy('subcategory')">
-            <input type="text" formControlName="name" placeholder="Nombre" />
-            <input type="number" formControlName="position" placeholder="Orden" />
+          <form class="mini-form taxonomy-form" [formGroup]="subcategoryForm" (ngSubmit)="saveTaxonomy('subcategory')">
+            <div class="selector-panel">
+              <strong>Categorías compatibles</strong>
+              <input
+                type="search"
+                placeholder="Filtrar categorías compatibles"
+                [value]="getSelectorQuery('subcategory-categories')"
+                (input)="setSelectorQuery('subcategory-categories', $any($event.target).value)" />
+              <div class="selector-list selector-list-compact">
+                @for (category of getFilteredTaxonomyOptions('category', 'subcategory-categories'); track category.id) {
+                  <label class="selector-option">
+                    <input
+                      type="checkbox"
+                      [checked]="isOptionSelected(subcategoryForm.controls.categorySlugs.value, category.slug)"
+                      (change)="toggleSelection(subcategoryForm.controls.categorySlugs, category.slug)" />
+                    <span>{{ category.name }}</span>
+                  </label>
+                }
+              </div>
+              <small>{{ getSelectedTaxonomySummary('category', subcategoryForm.controls.categorySlugs.value) }}</small>
+            </div>
+            <label>
+              Nombre
+              <input type="text" formControlName="name" placeholder="Ej. Playa" />
+            </label>
             <div class="form-actions">
               <button type="submit" class="button primary" [disabled]="isSavingSubcategory()">Guardar</button>
               <button type="button" class="button ghost" (click)="resetTaxonomyForm('subcategory')">Limpiar</button>
@@ -449,7 +555,12 @@
               <div class="stack-row">
                 <div>
                   <strong>{{ item.name }}</strong>
-                  <small>#{{ item.position }}</small>
+                  <small>
+                    {{ getTaxonomyLinkedProductsCount('subcategory', item.slug) }} productos
+                    @if (item.categorySlugs?.length) {
+                      · {{ getSelectedTaxonomySummary('category', item.categorySlugs ?? []) }}
+                    }
+                  </small>
                 </div>
                 <div class="row-actions">
                   <button type="button" class="button ghost" (click)="editTaxonomy('subcategory', item)">Editar</button>
@@ -468,9 +579,15 @@
             </div>
           </div>
 
-          <form class="mini-form" [formGroup]="collectionForm" (ngSubmit)="saveTaxonomy('collection')">
-            <input type="text" formControlName="name" placeholder="Nombre" />
-            <input type="number" formControlName="position" placeholder="Orden" />
+          <form class="mini-form taxonomy-form" [formGroup]="collectionForm" (ngSubmit)="saveTaxonomy('collection')">
+            <label>
+              Nombre
+              <input type="text" formControlName="name" placeholder="Ej. Verano 2026" />
+            </label>
+            <label>
+              Orden
+              <input type="number" formControlName="position" placeholder="10" />
+            </label>
             <div class="form-actions">
               <button type="submit" class="button primary" [disabled]="isSavingCollection()">Guardar</button>
               <button type="button" class="button ghost" (click)="resetTaxonomyForm('collection')">Limpiar</button>
@@ -482,7 +599,7 @@
               <div class="stack-row">
                 <div>
                   <strong>{{ item.name }}</strong>
-                  <small>#{{ item.position }}</small>
+                  <small>#{{ item.position }} · {{ getTaxonomyLinkedProductsCount('collection', item.slug) }} productos</small>
                 </div>
                 <div class="row-actions">
                   <button type="button" class="button ghost" (click)="editTaxonomy('collection', item)">Editar</button>
@@ -519,6 +636,41 @@
               <input type="date" formControlName="startsAt" />
               <input type="date" formControlName="endsAt" />
             </div>
+            <div class="selector-panel">
+              <input
+                type="search"
+                placeholder="Buscar productos para esta campaña"
+                [value]="getSelectorQuery('campaign-products')"
+                (input)="setSelectorQuery('campaign-products', $any($event.target).value)" />
+              <div class="selector-toolbar">
+                <select [value]="''" #campaignCategoryFilter>
+                  <option value="">Todas las categorías</option>
+                  @for (category of managedCategories$ | async; track category.id) {
+                    <option [value]="category.slug">{{ category.name }}</option>
+                  }
+                </select>
+                <select [value]="''" #campaignSubcategoryFilter>
+                  <option value="">Todas las subcategorías</option>
+                  @for (subcategory of getCatalogFilterSubcategories($any(campaignCategoryFilter).value || ''); track subcategory.id) {
+                    <option [value]="subcategory.slug">{{ subcategory.name }}</option>
+                  }
+                </select>
+              </div>
+              <div class="selector-list">
+                @for (product of getFilteredProductOptions('campaign-products', { categorySlug: $any(campaignCategoryFilter).value || '', subcategorySlug: $any(campaignSubcategoryFilter).value || '' }); track product.id) {
+                  <label class="selector-option">
+                    <input
+                      type="checkbox"
+                      [checked]="isOptionSelected(campaignForm.controls.productIds.value, product.id)"
+                      (change)="toggleSelection(campaignForm.controls.productIds, product.id)" />
+                    <span>{{ product.name }} <small>{{ getProductTaxonomy(product) }}</small></span>
+                  </label>
+                } @empty {
+                  <p class="empty-state">No hay productos con esos filtros.</p>
+                }
+              </div>
+              <small>{{ getSelectedProductSummary(campaignForm.controls.productIds.value) }}</small>
+            </div>
             <label class="checkbox-row">
               <input type="checkbox" formControlName="active" />
               Campaña activa
@@ -534,7 +686,7 @@
               <div class="stack-row">
                 <div>
                   <strong>{{ campaign.name }}</strong>
-                  <small>{{ getCampaignLifecycleLabel(campaign) }} · {{ campaign.badge }}</small>
+                  <small>{{ getCampaignLifecycleLabel(campaign) }} · {{ campaign.badge }} · {{ getCampaignLinkedProductsCount(campaign.id) }} productos</small>
                 </div>
                 <div class="row-actions">
                   <button type="button" class="button ghost" (click)="editCampaign(campaign)">Editar</button>
@@ -569,11 +721,29 @@
                 <option [value]="option.value">{{ option.label }}</option>
               }
             </select>
-            <select formControlName="productIds" multiple>
-              @for (product of products$ | async; track product.id) {
-                <option [value]="product.id">{{ product.name }}</option>
-              }
-            </select>
+            @if (discountCodeForm.controls.scope.value === 'products') {
+              <div class="selector-panel">
+                <input
+                  type="search"
+                  placeholder="Buscar productos para este código"
+                  [value]="getSelectorQuery('discount-products')"
+                  (input)="setSelectorQuery('discount-products', $any($event.target).value)" />
+                <div class="selector-list">
+                  @for (product of getFilteredProductOptions('discount-products'); track product.id) {
+                    <label class="selector-option">
+                      <input
+                        type="checkbox"
+                        [checked]="isOptionSelected(discountCodeForm.controls.productIds.value, product.id)"
+                        (change)="toggleSelection(discountCodeForm.controls.productIds, product.id)" />
+                      <span>{{ product.name }} <small>{{ getProductTaxonomy(product) }}</small></span>
+                    </label>
+                  } @empty {
+                    <p class="empty-state">No hay productos con ese filtro.</p>
+                  }
+                </div>
+                <small>{{ getSelectedProductSummary(discountCodeForm.controls.productIds.value) }}</small>
+              </div>
+            }
             <div class="date-row">
               <input type="date" formControlName="startsAt" />
               <input type="date" formControlName="endsAt" />
