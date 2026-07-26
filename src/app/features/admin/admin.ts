@@ -38,10 +38,11 @@ import {
   ProductStatus,
 } from '../../core/models/product.model';
 import { CatalogTaxonomy } from '../../core/models/taxonomy.model';
-import { HeroSlide, ShopSettings } from '../../core/models/shop-settings.model';
+import { AboutArticle, HeroSlide, ShopSettings } from '../../core/models/shop-settings.model';
 import { resolveProductPricing } from '../../core/utils/product-pricing';
 import { slugify } from '../../core/utils/slug';
 import { environment } from '../../../environments/environment';
+import { AdminMaintenanceService } from '../../core/services/admin-maintenance.service';
 import { AlertsService } from '../../core/services/alerts.service';
 import { CampaignsService } from '../../core/services/campaigns.service';
 import { DiscountCodesService } from '../../core/services/discount-codes.service';
@@ -77,6 +78,7 @@ interface AdminNavItem {
 export class Admin {
   private readonly destroyRef = inject(DestroyRef);
   private readonly formBuilder = inject(FormBuilder);
+  private readonly adminMaintenanceService = inject(AdminMaintenanceService);
   private readonly alertsService = inject(AlertsService);
   private readonly campaignsService = inject(CampaignsService);
   private readonly discountCodesService = inject(DiscountCodesService);
@@ -110,7 +112,9 @@ export class Admin {
   readonly activeOrderActionId = signal<string | null>(null);
   readonly galleryUrls = signal<string[]>([]);
   readonly heroSlides = signal<HeroSlide[]>([]);
+  readonly aboutArticles = signal<AboutArticle[]>([]);
   readonly activeHeroUploadId = signal<string | null>(null);
+  readonly isWipingStore = signal(false);
   readonly catalogSort = signal<{ key: CatalogSortKey; direction: SortDirection }>({
     key: 'position',
     direction: 'asc',
@@ -123,7 +127,7 @@ export class Admin {
     { key: 'orders', label: 'Pedidos', caption: 'Flujo de fabricación y entrega' },
     { key: 'catalog', label: 'Catálogo', caption: 'Listado, stock y orden' },
     { key: 'product', label: 'Producto', caption: 'Alta y edición' },
-    { key: 'taxonomy', label: 'Taxonomías', caption: 'Categorías, subcategorías y colecciones' },
+    { key: 'taxonomy', label: 'Clasificación', caption: 'Categorías, subcategorías y colecciones' },
     { key: 'promotions', label: 'Promociones', caption: 'Campañas, ofertas y códigos' },
     { key: 'settings', label: 'Ajustes', caption: 'Bizum, envíos, sobre mí y carrusel' },
   ];
@@ -751,6 +755,55 @@ export class Admin {
     this.heroSlides.set(this.reindexHeroSlides(this.heroSlides().filter((_, slideIndex) => slideIndex !== index)));
   }
 
+  addAboutArticle(): void {
+    this.aboutArticles.set(
+      this.reindexAboutArticles([
+        ...this.aboutArticles(),
+        {
+          id: `about-${Date.now()}`,
+          eyebrow: '',
+          title: '',
+          body: '',
+          position: 0,
+        },
+      ]),
+    );
+  }
+
+  updateAboutArticleField(index: number, field: 'body' | 'eyebrow' | 'title', value: string): void {
+    const articles = [...this.aboutArticles()];
+    const article = articles[index];
+
+    if (!article) {
+      return;
+    }
+
+    articles[index] = {
+      ...article,
+      [field]: value,
+    };
+
+    this.aboutArticles.set(articles);
+  }
+
+  moveAboutArticle(index: number, direction: -1 | 1): void {
+    const nextIndex = index + direction;
+    const articles = [...this.aboutArticles()];
+
+    if (nextIndex < 0 || nextIndex >= articles.length) {
+      return;
+    }
+
+    [articles[index], articles[nextIndex]] = [articles[nextIndex], articles[index]];
+    this.aboutArticles.set(this.reindexAboutArticles(articles));
+  }
+
+  removeAboutArticle(index: number): void {
+    this.aboutArticles.set(
+      this.reindexAboutArticles(this.aboutArticles().filter((_, articleIndex) => articleIndex !== index)),
+    );
+  }
+
   async saveCampaign(): Promise<void> {
     if (this.campaignForm.invalid) {
       this.campaignForm.markAllAsTouched();
@@ -1015,15 +1068,15 @@ export class Admin {
           });
         }
 
-        this.setSuccess('Taxonomía actualizada correctamente.');
+        this.setSuccess('Clasificación actualizada correctamente.');
       } else {
         await this.taxonomiesService.createTaxonomy(type, draft);
-        this.setSuccess('Taxonomía creada correctamente.');
+        this.setSuccess('Clasificación creada correctamente.');
       }
 
       this.resetTaxonomyForm(type, false);
     } catch (error) {
-      this.setError(error, 'No se pudo guardar la taxonomía.');
+      this.setError(error, 'No se pudo guardar la clasificación.');
     } finally {
       this.setTaxonomySaving(type, false);
     }
@@ -1070,7 +1123,7 @@ export class Admin {
 
   async deleteTaxonomy(type: 'category' | 'subcategory' | 'collection', taxonomyId: string): Promise<void> {
     const confirmed = await this.alertsService.confirm({
-      title: 'Borrar taxonomía',
+      title: 'Borrar clasificación',
       text: 'Seguirá existiendo en productos históricos si no se reasigna manualmente.',
       confirmButtonText: 'Borrar',
     });
@@ -1081,10 +1134,10 @@ export class Admin {
 
     try {
       await this.taxonomiesService.deleteTaxonomy(type, taxonomyId);
-      this.setSuccess('Taxonomía eliminada correctamente.');
+      this.setSuccess('Clasificación eliminada correctamente.');
       this.resetTaxonomyForm(type, false);
     } catch (error) {
-      this.setError(error, 'No se pudo borrar la taxonomía.');
+      this.setError(error, 'No se pudo borrar la clasificación.');
     }
   }
 
@@ -1101,7 +1154,7 @@ export class Admin {
       settingsDraft = this.formToSettingsDraft();
     } catch (error) {
       this.showValidationError(
-        error instanceof Error ? error.message : 'Revisa los slides del carrusel antes de guardar.',
+        error instanceof Error ? error.message : 'Revisa el contenido de “Sobre mí” y el carrusel antes de guardar.',
       );
       return;
     }
@@ -1115,6 +1168,35 @@ export class Admin {
       this.setError(error, 'No se pudieron guardar los ajustes.');
     } finally {
       this.isSavingSettings.set(false);
+    }
+  }
+
+  async wipeStoreData(): Promise<void> {
+    const confirmed = await this.alertsService.confirm({
+      title: 'Borrar base de datos',
+      text: 'Se eliminarán productos, pedidos, campañas, clasificaciones, mensajes e imágenes subidas. Esta acción no se puede deshacer.',
+      confirmButtonText: 'Borrar todo',
+      cancelButtonText: 'Cancelar',
+      icon: 'warning',
+    });
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      this.isWipingStore.set(true);
+      this.clearMessages();
+      await this.adminMaintenanceService.wipeStoreData();
+      await this.alertsService.success(
+        'Base de datos borrada',
+        'Se ha limpiado el contenido de la tienda. La página se recargará para refrescar el panel.',
+      );
+      window.location.reload();
+    } catch (error) {
+      this.setError(error, 'No se pudo borrar la base de datos.');
+    } finally {
+      this.isWipingStore.set(false);
     }
   }
 
@@ -1293,8 +1375,30 @@ export class Admin {
       contactEmail: value.contactEmail.trim(),
       aboutTitle: value.aboutTitle.trim(),
       aboutBody: value.aboutBody.trim(),
+      aboutArticles: this.buildAboutArticlesFromState(),
       heroSlides: this.buildHeroSlidesFromForm(),
     };
+  }
+
+  private buildAboutArticlesFromState(): AboutArticle[] {
+    const articles = this.reindexAboutArticles(
+      this.aboutArticles().map((article) => ({
+        ...article,
+        eyebrow: article.eyebrow.trim(),
+        title: article.title.trim(),
+        body: article.body.trim(),
+      })),
+    );
+    const hasIncompleteArticle = articles.some((article) => {
+      const filledFields = [article.eyebrow, article.title, article.body].filter(Boolean).length;
+      return filledFields > 0 && filledFields < 3;
+    });
+
+    if (hasIncompleteArticle) {
+      throw new Error('Cada artículo de “Sobre mí” debe tener etiqueta, título y texto, o quedarse completamente vacío.');
+    }
+
+    return articles.filter((article) => article.eyebrow && article.title && article.body);
   }
 
   private buildHeroSlidesFromForm(): HeroSlide[] {
@@ -1326,6 +1430,14 @@ export class Admin {
       aboutTitle: settings.aboutTitle,
       aboutBody: settings.aboutBody,
     }, { emitEvent: false });
+
+    this.aboutArticles.set(
+      this.reindexAboutArticles(
+        settings.aboutArticles.length
+          ? settings.aboutArticles.map((article) => ({ ...article }))
+          : [],
+      ),
+    );
 
     this.heroSlides.set(
       this.reindexHeroSlides(
@@ -1731,6 +1843,13 @@ export class Admin {
   private reindexHeroSlides(slides: HeroSlide[]): HeroSlide[] {
     return slides.map((slide, index) => ({
       ...slide,
+      position: (index + 1) * 10,
+    }));
+  }
+
+  private reindexAboutArticles(articles: AboutArticle[]): AboutArticle[] {
+    return articles.map((article, index) => ({
+      ...article,
       position: (index + 1) * 10,
     }));
   }

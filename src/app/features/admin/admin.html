@@ -181,7 +181,7 @@
             <p>Ordena, revisa stock y entra a editar cualquier referencia.</p>
           </div>
           <form class="toolbar" [formGroup]="catalogFiltersForm">
-            <input type="search" formControlName="query" placeholder="Buscar producto, estado o taxonomía" />
+            <input type="search" formControlName="query" placeholder="Buscar producto, estado o clasificación" />
             <select formControlName="categorySlug">
               <option value="">Todas las categorías</option>
               @for (category of managedCategories$ | async; track category.id) {
@@ -206,7 +206,7 @@
               Orden <small>{{ getCatalogSortLabel('position') }}</small>
             </button>
             <button type="button" class="table-head-button" (click)="toggleCatalogSort('taxonomy')">
-              Taxonomía <small>{{ getCatalogSortLabel('taxonomy') }}</small>
+              Clasificación <small>{{ getCatalogSortLabel('taxonomy') }}</small>
             </button>
             <button type="button" class="table-head-button" (click)="toggleCatalogSort('price')">
               Precio <small>{{ getCatalogSortLabel('price') }}</small>
@@ -781,11 +781,11 @@
         <div class="panel-header">
           <div>
             <h2>Ajustes generales</h2>
-            <p>Bizum, envío, ficha “Sobre mí”, correo de consultas y carrusel principal.</p>
+            <p>Bizum, envío, ficha pública, correo de consultas y carrusel principal.</p>
           </div>
         </div>
 
-        <form class="product-form" [formGroup]="settingsForm" (ngSubmit)="saveSettings()">
+        <form class="product-form settings-form" [formGroup]="settingsForm" (ngSubmit)="saveSettings()">
           <label>
             Teléfono Bizum
             <input type="text" formControlName="bizumPhone" />
@@ -801,67 +801,125 @@
             <input type="email" formControlName="contactEmail" />
           </label>
 
-          <label class="wide">
-            Título “Sobre mí”
-            <input type="text" formControlName="aboutTitle" />
-          </label>
-
-          <label class="wide">
-            Texto “Sobre mí”
-            <textarea rows="5" formControlName="aboutBody"></textarea>
-          </label>
-
-          <div class="wide hero-settings-header">
-            <div>
-              <strong>Carrusel principal</strong>
-              <small>Sube imágenes, cambia el orden y activa solo los slides que quieras mostrar.</small>
+          <div class="wide settings-subpanel">
+            <div class="panel-header">
+              <div>
+                <h3>Sobre mí</h3>
+                <p>Controla el encabezado y las tarjetas visibles en la página pública.</p>
+              </div>
+              <button type="button" class="button ghost" (click)="addAboutArticle()">Añadir artículo</button>
             </div>
-            <button type="button" class="button ghost" (click)="addHeroSlide()">Añadir slide</button>
+
+            <div class="product-form settings-inner-grid">
+              <label class="wide">
+                Título
+                <input type="text" formControlName="aboutTitle" />
+              </label>
+
+              <label class="wide">
+                Texto
+                <textarea rows="5" formControlName="aboutBody"></textarea>
+              </label>
+            </div>
+
+            <div class="hero-settings-grid">
+              @for (article of aboutArticles(); track article.id; let index = $index) {
+                <article class="hero-settings-card">
+                  <div class="hero-card-head">
+                    <h3>Artículo {{ index + 1 }}</h3>
+                    <div class="row-actions">
+                      <button type="button" class="button ghost" [disabled]="index === 0" (click)="moveAboutArticle(index, -1)">Subir</button>
+                      <button type="button" class="button ghost" [disabled]="index === aboutArticles().length - 1" (click)="moveAboutArticle(index, 1)">Bajar</button>
+                      <button type="button" class="button danger" (click)="removeAboutArticle(index)">Quitar</button>
+                    </div>
+                  </div>
+
+                  <label>
+                    Etiqueta
+                    <input type="text" [value]="article.eyebrow" (input)="updateAboutArticleField(index, 'eyebrow', $any($event.target).value)" />
+                  </label>
+
+                  <label>
+                    Título
+                    <input type="text" [value]="article.title" (input)="updateAboutArticleField(index, 'title', $any($event.target).value)" />
+                  </label>
+
+                  <label>
+                    Texto
+                    <textarea rows="4" [value]="article.body" (input)="updateAboutArticleField(index, 'body', $any($event.target).value)"></textarea>
+                  </label>
+                </article>
+              } @empty {
+                <p class="empty-state">Aún no hay artículos. Añade el primero para completar la sección.</p>
+              }
+            </div>
           </div>
 
-          <div class="wide hero-settings-grid">
-            @for (slide of heroSlides(); track slide.id; let index = $index) {
-              <article class="hero-settings-card">
-                <div class="hero-card-head">
-                  <h3>Slide {{ index + 1 }}</h3>
-                  <div class="row-actions">
-                    <button type="button" class="button ghost" [disabled]="index === 0" (click)="moveHeroSlide(index, -1)">Subir</button>
-                    <button type="button" class="button ghost" [disabled]="index === heroSlides().length - 1" (click)="moveHeroSlide(index, 1)">Bajar</button>
-                    <button type="button" class="button danger" (click)="removeHeroSlide(index)">Quitar</button>
+          <div class="wide settings-subpanel">
+            <div class="hero-settings-header">
+              <div>
+                <strong>Carrusel principal</strong>
+                <small>Sube imágenes, cambia el orden y activa solo los slides que quieras mostrar.</small>
+              </div>
+              <button type="button" class="button ghost" (click)="addHeroSlide()">Añadir slide</button>
+            </div>
+
+            <div class="hero-settings-grid">
+              @for (slide of heroSlides(); track slide.id; let index = $index) {
+                <article class="hero-settings-card">
+                  <div class="hero-card-head">
+                    <h3>Slide {{ index + 1 }}</h3>
+                    <div class="row-actions">
+                      <button type="button" class="button ghost" [disabled]="index === 0" (click)="moveHeroSlide(index, -1)">Subir</button>
+                      <button type="button" class="button ghost" [disabled]="index === heroSlides().length - 1" (click)="moveHeroSlide(index, 1)">Bajar</button>
+                      <button type="button" class="button danger" (click)="removeHeroSlide(index)">Quitar</button>
+                    </div>
                   </div>
-                </div>
 
-                <div class="hero-slide-preview">
-                  @if (slide.imageUrl) {
-                    <img [src]="slide.imageUrl" [alt]="slide.headline || 'Slide del carrusel'" />
-                  } @else {
-                    <div class="empty-media">Sin imagen</div>
-                  }
-                </div>
+                  <div class="hero-slide-preview">
+                    @if (slide.imageUrl) {
+                      <img [src]="slide.imageUrl" [alt]="slide.headline || 'Slide del carrusel'" />
+                    } @else {
+                      <div class="empty-media">Sin imagen</div>
+                    }
+                  </div>
 
-                <label class="button ghost upload-button">
-                  {{ activeHeroUploadId() === slide.id ? 'Subiendo...' : 'Seleccionar imagen' }}
-                  <input type="file" accept="image/*" [disabled]="activeHeroUploadId() === slide.id" (change)="uploadHeroSlideImage(index, $event)" />
-                </label>
+                  <label class="button ghost upload-button">
+                    {{ activeHeroUploadId() === slide.id ? 'Subiendo...' : 'Seleccionar imagen' }}
+                    <input type="file" accept="image/*" [disabled]="activeHeroUploadId() === slide.id" (change)="uploadHeroSlideImage(index, $event)" />
+                  </label>
 
-                <label>
-                  Titular
-                  <input type="text" [value]="slide.headline" (input)="updateHeroSlideField(index, 'headline', $any($event.target).value)" />
-                </label>
+                  <label>
+                    Titular
+                    <input type="text" [value]="slide.headline" (input)="updateHeroSlideField(index, 'headline', $any($event.target).value)" />
+                  </label>
 
-                <label>
-                  Texto al pie
-                  <textarea rows="3" [value]="slide.caption" (input)="updateHeroSlideField(index, 'caption', $any($event.target).value)"></textarea>
-                </label>
+                  <label>
+                    Texto al pie
+                    <textarea rows="3" [value]="slide.caption" (input)="updateHeroSlideField(index, 'caption', $any($event.target).value)"></textarea>
+                  </label>
 
-                <label class="checkbox-row">
-                  <input type="checkbox" [checked]="slide.active" (change)="toggleHeroSlideActive(index, $any($event.target).checked)" />
-                  Activo
-                </label>
-              </article>
-            } @empty {
-              <p class="empty-state">Aún no hay slides. Añade el primero para empezar a montar el carrusel.</p>
-            }
+                  <label class="checkbox-row">
+                    <input type="checkbox" [checked]="slide.active" (change)="toggleHeroSlideActive(index, $any($event.target).checked)" />
+                    Activo
+                  </label>
+                </article>
+              } @empty {
+                <p class="empty-state">Aún no hay slides. Añade el primero para empezar a montar el carrusel.</p>
+              }
+            </div>
+          </div>
+
+          <div class="wide settings-subpanel danger-zone">
+            <div class="panel-header">
+              <div>
+                <h3>Zona delicada</h3>
+                <p>Borra productos, pedidos, campañas, mensajes e imágenes subidas para reiniciar la tienda.</p>
+              </div>
+              <button type="button" class="button danger danger-button" [disabled]="isWipingStore()" (click)="wipeStoreData()">
+                {{ isWipingStore() ? 'Borrando...' : 'Borrar la Base de Datos' }}
+              </button>
+            </div>
           </div>
 
           <div class="form-actions wide">

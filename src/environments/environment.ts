@@ -2,7 +2,7 @@ export const environment = {
   production: true,
   firebase: {
     enabled: true,
-    adminEmails: ['gabramsua@gmail.com'],
+    adminEmails: ['gabramsua@gmail.com', 'martura.handmade@gmail.com'],
     useEmulators: false,
     config: {
       apiKey: "AIzaSyB6_4iJHwKebbeXrVN0DECQemOkUGJlvjQ",

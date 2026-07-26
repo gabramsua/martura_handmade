@@ -7,6 +7,14 @@ export interface HeroSlide {
   active: boolean;
 }
 
+export interface AboutArticle {
+  id: string;
+  eyebrow: string;
+  title: string;
+  body: string;
+  position: number;
+}
+
 export interface ShopSettings {
   id: string;
   bizumPhone: string;
@@ -14,6 +22,7 @@ export interface ShopSettings {
   contactEmail: string;
   aboutTitle: string;
   aboutBody: string;
+  aboutArticles: AboutArticle[];
   heroSlides: HeroSlide[];
 }
 
@@ -23,12 +32,38 @@ export type ShopSettingsDraft = Omit<ShopSettings, 'id'> & {
 
 export const DEFAULT_SHOP_SETTINGS: ShopSettings = {
   id: 'default',
-  bizumPhone: '600000000',
+  bizumPhone: '697748991',
   shippingPrice: 4.95,
-  contactEmail: 'gabramsua@gmail.com',
+  contactEmail: 'martura.handmade@gmail.com',
   aboutTitle: 'Sobre Martura Handmade',
   aboutBody:
     'Piezas textiles hechas a mano, con tejidos escogidos uno a uno y un ritmo de taller tranquilo. Cada pedido se prepara con mimo y posibilidad de personalización.',
+  aboutArticles: [
+    {
+      id: 'about-1',
+      eyebrow: 'Forma de trabajo',
+      title: 'Piezas hechas a mano y encargos con trato directo',
+      body:
+        'Cada producto nace en taller, con tejidos y acabados escogidos uno a uno. Si necesitas un ajuste, una combinación concreta o un detalle especial, la sección de consultas queda abierta para eso.',
+      position: 10,
+    },
+    {
+      id: 'about-2',
+      eyebrow: 'Contacto',
+      title: 'martura.handmade@gmail.com',
+      body:
+        'También puedes escribir desde el formulario y dejar contexto del encargo, duda o idea que tengas en mente.',
+      position: 20,
+    },
+    {
+      id: 'about-3',
+      eyebrow: 'Pago activo',
+      title: 'Bizum al 697748991',
+      body:
+        'El número puede cambiar desde administración y el cliente lo ve siempre actualizado al terminar el pedido.',
+      position: 30,
+    },
+  ],
   heroSlides: [
     {
       id: 'hero-1',

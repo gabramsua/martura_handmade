@@ -1,5 +1,6 @@
 import { initializeApp } from 'firebase-admin/app';
 import { DocumentReference, Timestamp, Transaction, getFirestore } from 'firebase-admin/firestore';
+import { getStorage } from 'firebase-admin/storage';
 import { CallableRequest, HttpsError, onCall } from 'firebase-functions/v2/https';
 import { setGlobalOptions } from 'firebase-functions/v2/options';
 
@@ -10,7 +11,7 @@ const db = getFirestore();
 const DEFAULT_SHIPPING_PRICE = 4.95;
 const ADMIN_EMAILS = (
   process.env.ADMIN_EMAILS ??
-  'gabramsua@gmail.com'
+  'gabramsua@gmail.com,martura.handmade@gmail.com'
 )
   .split(',')
   .map((email) => email.trim().toLowerCase())
@@ -317,6 +318,32 @@ export const updateOrderStatus = onCall<UpdateOrderStatusPayload>(
   },
 );
 
+export const wipeStoreData = onCall(async (request: CallableRequest) => {
+  assertAdmin(request.auth);
+
+  const collections = [
+    'products',
+    'campaigns',
+    'productCategories',
+    'productSubcategories',
+    'productCollections',
+    'discountCodes',
+    'orders',
+    'contactMessages',
+    'customers',
+    'shopSettings',
+  ];
+
+  for (const collectionName of collections) {
+    await deleteCollectionDocuments(collectionName);
+  }
+
+  await deleteStoragePrefix('products/');
+  await deleteStoragePrefix('hero-slides/');
+
+  return { ok: true };
+});
+
 function assertAdmin(auth: { uid: string; token?: { email?: string } } | null | undefined): void {
   const email = auth?.token?.email?.toLowerCase();
 
@@ -536,6 +563,37 @@ async function readSettings(transaction: Transaction): Promise<{ shippingPrice: 
         ? Math.max(0, data.shippingPrice)
         : DEFAULT_SHIPPING_PRICE,
   };
+}
+
+async function deleteCollectionDocuments(collectionName: string): Promise<void> {
+  while (true) {
+    const snapshot = await db.collection(collectionName).limit(400).get();
+
+    if (snapshot.empty) {
+      return;
+    }
+
+    const batch = db.batch();
+
+    for (const document of snapshot.docs) {
+      batch.delete(document.ref);
+    }
+
+    await batch.commit();
+  }
+}
+
+async function deleteStoragePrefix(prefix: string): Promise<void> {
+  const bucket = getStorage().bucket();
+  const [files] = await bucket.getFiles({ prefix });
+
+  if (!files.length) {
+    return;
+  }
+
+  await Promise.allSettled(
+    files.map((file) => file.delete().catch(() => undefined)),
+  );
 }
 
 function resolveProductPrice(

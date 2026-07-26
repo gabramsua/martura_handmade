@@ -10,6 +10,7 @@ import { BehaviorSubject, map } from 'rxjs';
 
 import { firestoreCollections, isFirebaseConfigured } from '../firebase/firebase.config';
 import {
+  AboutArticle,
   DEFAULT_SHOP_SETTINGS,
   HeroSlide,
   ShopSettings,
@@ -33,6 +34,11 @@ export class ShopSettingsService {
       [...settings.heroSlides]
         .filter((slide) => slide.active)
         .sort((left, right) => left.position - right.position),
+    ),
+  );
+  readonly aboutArticles$ = this.settings$.pipe(
+    map((settings) =>
+      [...settings.aboutArticles].sort((left, right) => left.position - right.position),
     ),
   );
 
@@ -82,6 +88,10 @@ export class ShopSettingsService {
   }
 
   private reviveSettings(value: Partial<ShopSettings> | null): ShopSettings {
+    const fallbackAboutArticles = this.buildDefaultAboutArticles(value);
+    const aboutArticles = Array.isArray(value?.aboutArticles)
+      ? value.aboutArticles.map((article, index) => this.reviveAboutArticle(article, index, fallbackAboutArticles))
+      : fallbackAboutArticles;
     const heroSlides = Array.isArray(value?.heroSlides)
       ? value.heroSlides.map((slide, index) => this.reviveSlide(slide, index))
       : DEFAULT_SHOP_SETTINGS.heroSlides;
@@ -108,8 +118,54 @@ export class ShopSettingsService {
         typeof value?.aboutBody === 'string' && value.aboutBody.trim()
           ? value.aboutBody.trim()
           : DEFAULT_SHOP_SETTINGS.aboutBody,
+      aboutArticles,
       heroSlides,
     };
+  }
+
+  private reviveAboutArticle(
+    value: Partial<AboutArticle>,
+    index: number,
+    fallbackArticles: AboutArticle[],
+  ): AboutArticle {
+    const fallback = fallbackArticles[index] ?? fallbackArticles[0];
+
+    return {
+      id: typeof value.id === 'string' && value.id.trim() ? value.id : `about-${index + 1}`,
+      eyebrow:
+        typeof value.eyebrow === 'string' && value.eyebrow.trim() ? value.eyebrow.trim() : fallback.eyebrow,
+      title:
+        typeof value.title === 'string' && value.title.trim() ? value.title.trim() : fallback.title,
+      body:
+        typeof value.body === 'string' && value.body.trim() ? value.body.trim() : fallback.body,
+      position:
+        typeof value.position === 'number' && Number.isFinite(value.position) ? value.position : (index + 1) * 10,
+    };
+  }
+
+  private buildDefaultAboutArticles(value: Partial<ShopSettings> | null): AboutArticle[] {
+    const contactEmail =
+      typeof value?.contactEmail === 'string' && value.contactEmail.trim()
+        ? value.contactEmail.trim()
+        : DEFAULT_SHOP_SETTINGS.contactEmail;
+    const bizumPhone =
+      typeof value?.bizumPhone === 'string' && value.bizumPhone.trim()
+        ? value.bizumPhone.trim()
+        : DEFAULT_SHOP_SETTINGS.bizumPhone;
+
+    return [
+      {
+        ...DEFAULT_SHOP_SETTINGS.aboutArticles[0],
+      },
+      {
+        ...DEFAULT_SHOP_SETTINGS.aboutArticles[1],
+        title: contactEmail,
+      },
+      {
+        ...DEFAULT_SHOP_SETTINGS.aboutArticles[2],
+        title: `Bizum al ${bizumPhone}`,
+      },
+    ];
   }
 
   private reviveSlide(value: Partial<HeroSlide>, index: number): HeroSlide {
@@ -133,6 +189,7 @@ export class ShopSettingsService {
     return this.reviveSettings({
       ...draft,
       id: draft.id ?? DEFAULT_SHOP_SETTINGS.id,
+      aboutArticles: draft.aboutArticles,
       heroSlides: draft.heroSlides,
     });
   }

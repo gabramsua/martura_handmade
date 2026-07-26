@@ -579,6 +579,36 @@ button:disabled,
   grid-column: 1 / -1;
 }
 
+.settings-form {
+  align-items: start;
+}
+
+.settings-subpanel {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 18px;
+  padding: 18px;
+}
+
+.settings-subpanel h3 {
+  margin: 0;
+}
+
+.settings-inner-grid {
+  grid-template-columns: 1fr;
+}
+
+.danger-zone {
+  border-color: #efc9c1;
+  background: #fff8f6;
+}
+
+.danger-button {
+  min-width: 220px;
+}
+
 .hero-settings-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
