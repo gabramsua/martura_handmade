@@ -43,7 +43,7 @@ export class Contact {
       });
       await this.alertsService.success(
         'Consulta enviada',
-        'La consulta ha quedado registrada. Más adelante conectaremos también el envío por correo.',
+        'La consulta ha quedado enviada y registrada correctamente.',
       );
     } catch (error) {
       await this.alertsService.error(

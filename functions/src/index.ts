@@ -1,6 +1,9 @@
 import { initializeApp } from 'firebase-admin/app';
 import { DocumentReference, Timestamp, Transaction, getFirestore } from 'firebase-admin/firestore';
 import { getStorage } from 'firebase-admin/storage';
+import nodemailer from 'nodemailer';
+import { defineSecret } from 'firebase-functions/params';
+import { onDocumentCreated, onDocumentUpdated } from 'firebase-functions/v2/firestore';
 import { CallableRequest, HttpsError, onCall } from 'firebase-functions/v2/https';
 import { setGlobalOptions } from 'firebase-functions/v2/options';
 
@@ -9,6 +12,8 @@ setGlobalOptions({ region: 'europe-west1', maxInstances: 10 });
 
 const db = getFirestore();
 const DEFAULT_SHIPPING_PRICE = 4.95;
+const DEFAULT_BIZUM_PHONE = '697748991';
+const DEFAULT_CONTACT_EMAIL = 'martura.handmade@gmail.com';
 const ADMIN_EMAILS = (
   process.env.ADMIN_EMAILS ??
   'gabramsua@gmail.com,martura.handmade@gmail.com'
@@ -16,8 +21,14 @@ const ADMIN_EMAILS = (
   .split(',')
   .map((email) => email.trim().toLowerCase())
   .filter(Boolean);
+const SMTP_USER = defineSecret('SMTP_USER');
+const SMTP_PASS = defineSecret('SMTP_PASS');
 const ORDER_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const ORDER_CODE_LENGTH = 8;
+const MAIL_TIME_ZONE = 'Europe/Madrid';
+
+let mailTransport: nodemailer.Transporter | null = null;
+let mailTransportCacheKey: string | null = null;
 
 type DeliveryMethod = 'shipping';
 type ProductStatus = 'active' | 'sold_out' | 'hidden';
@@ -144,6 +155,29 @@ interface StoredDiscountCode {
 
 interface StoredShopSettings {
   shippingPrice?: number;
+  bizumPhone?: string;
+  contactEmail?: string;
+}
+
+interface ShopEmailSettings {
+  shippingPrice: number;
+  bizumPhone: string;
+  contactEmail: string;
+}
+
+interface StoredContactMessage {
+  name?: string;
+  email?: string;
+  body?: string;
+  createdAt?: Date | Timestamp | string | number | null;
+}
+
+interface ContactMessageRecord {
+  id: string;
+  name: string;
+  email: string;
+  body: string;
+  createdAt: Date;
 }
 
 const allowedTransitions: Record<OrderStatus, OrderStatus[]> = {
@@ -315,6 +349,87 @@ export const updateOrderStatus = onCall<UpdateOrderStatusPayload>(
     }
 
     return serializeOrder(updatedOrder);
+  },
+);
+
+export const notifyOrderCreated = onDocumentCreated(
+  {
+    document: 'orders/{orderId}',
+    secrets: [SMTP_USER, SMTP_PASS],
+  },
+  async (event) => {
+    const snapshot = event.data;
+
+    if (!snapshot) {
+      return;
+    }
+
+    const order = reviveOrder(snapshot.id, snapshot.data() as Partial<CheckoutOrder>);
+    const settings = await readShopEmailSettings();
+    const adminEmail = normalizeEmail(settings.contactEmail) ?? ADMIN_EMAILS[0] ?? DEFAULT_CONTACT_EMAIL;
+    const customerEmail = normalizeEmail(order.customer.email);
+
+    if (!customerEmail) {
+      console.warn(`[notifyOrderCreated] Pedido ${order.id} sin email de cliente.`);
+      return;
+    }
+
+    await Promise.allSettled([
+      sendOrderConfirmationToCustomer(order, settings, customerEmail),
+      sendNewOrderNotificationToAdmin(order, settings, adminEmail),
+    ]);
+  },
+);
+
+export const notifyOrderStatusChanged = onDocumentUpdated(
+  {
+    document: 'orders/{orderId}',
+    secrets: [SMTP_USER, SMTP_PASS],
+  },
+  async (event) => {
+    const beforeSnapshot = event.data?.before;
+    const afterSnapshot = event.data?.after;
+
+    if (!beforeSnapshot || !afterSnapshot) {
+      return;
+    }
+
+    const previousOrder = reviveOrder(beforeSnapshot.id, beforeSnapshot.data() as Partial<CheckoutOrder>);
+    const currentOrder = reviveOrder(afterSnapshot.id, afterSnapshot.data() as Partial<CheckoutOrder>);
+
+    if (previousOrder.status === currentOrder.status) {
+      return;
+    }
+
+    const settings = await readShopEmailSettings();
+    const customerEmail = normalizeEmail(currentOrder.customer.email);
+
+    if (!customerEmail) {
+      console.warn(`[notifyOrderStatusChanged] Pedido ${currentOrder.id} sin email de cliente.`);
+      return;
+    }
+
+    await sendOrderStatusEmail(currentOrder, previousOrder.status, settings, customerEmail);
+  },
+);
+
+export const notifyContactMessageCreated = onDocumentCreated(
+  {
+    document: 'contactMessages/{messageId}',
+    secrets: [SMTP_USER, SMTP_PASS],
+  },
+  async (event) => {
+    const snapshot = event.data;
+
+    if (!snapshot) {
+      return;
+    }
+
+    const message = reviveContactMessage(snapshot.id, snapshot.data() as StoredContactMessage);
+    const settings = await readShopEmailSettings();
+    const adminEmail = normalizeEmail(settings.contactEmail) ?? ADMIN_EMAILS[0] ?? DEFAULT_CONTACT_EMAIL;
+
+    await sendContactMessageNotification(message, adminEmail);
   },
 );
 
@@ -547,21 +662,49 @@ async function readCampaigns(
   return campaigns;
 }
 
-async function readSettings(transaction: Transaction): Promise<{ shippingPrice: number }> {
+async function readSettings(transaction: Transaction): Promise<ShopEmailSettings> {
   const settingsRef = db.collection('shopSettings').doc('default');
   const snapshot = await transaction.get(settingsRef);
 
   if (!snapshot.exists) {
-    return { shippingPrice: DEFAULT_SHIPPING_PRICE };
+    return {
+      shippingPrice: DEFAULT_SHIPPING_PRICE,
+      bizumPhone: DEFAULT_BIZUM_PHONE,
+      contactEmail: DEFAULT_CONTACT_EMAIL,
+    };
   }
 
-  const data = snapshot.data() as StoredShopSettings;
+  return reviveShopEmailSettings(snapshot.data() as StoredShopSettings);
+}
 
+async function readShopEmailSettings(): Promise<ShopEmailSettings> {
+  const snapshot = await db.collection('shopSettings').doc('default').get();
+
+  if (!snapshot.exists) {
+    return {
+      shippingPrice: DEFAULT_SHIPPING_PRICE,
+      bizumPhone: DEFAULT_BIZUM_PHONE,
+      contactEmail: DEFAULT_CONTACT_EMAIL,
+    };
+  }
+
+  return reviveShopEmailSettings(snapshot.data() as StoredShopSettings);
+}
+
+function reviveShopEmailSettings(data: StoredShopSettings | null | undefined): ShopEmailSettings {
   return {
     shippingPrice:
-      typeof data.shippingPrice === 'number' && Number.isFinite(data.shippingPrice)
+      typeof data?.shippingPrice === 'number' && Number.isFinite(data.shippingPrice)
         ? Math.max(0, data.shippingPrice)
         : DEFAULT_SHIPPING_PRICE,
+    bizumPhone:
+      typeof data?.bizumPhone === 'string' && data.bizumPhone.trim()
+        ? data.bizumPhone.trim()
+        : DEFAULT_BIZUM_PHONE,
+    contactEmail:
+      typeof data?.contactEmail === 'string' && data.contactEmail.trim()
+        ? data.contactEmail.trim()
+        : DEFAULT_CONTACT_EMAIL,
   };
 }
 
@@ -834,6 +977,339 @@ function shouldReleaseInventory(currentStatus: OrderStatus, nextStatus: OrderSta
 
 function shouldReserveInventory(currentStatus: OrderStatus, nextStatus: OrderStatus): boolean {
   return currentStatus === 'cancelled' && nextStatus !== 'cancelled';
+}
+
+function reviveContactMessage(messageId: string, data: StoredContactMessage): ContactMessageRecord {
+  return {
+    id: messageId,
+    name: sanitizeString(data.name),
+    email: sanitizeString(data.email),
+    body: sanitizeString(data.body),
+    createdAt: normalizeUnknownDate(data.createdAt),
+  };
+}
+
+async function sendOrderConfirmationToCustomer(
+  order: CheckoutOrder,
+  settings: ShopEmailSettings,
+  customerEmail: string,
+): Promise<void> {
+  const subject = `Hemos recibido tu pedido ${order.id}`;
+  const previewLines = buildOrderLineTexts(order.items);
+  const discountText = order.discount
+    ? `Descuento (${order.discount.code}): -${formatCurrency(order.discount.amount)}`
+    : 'Descuento: no aplica';
+  const text = [
+    `Hola ${order.customer.name},`,
+    '',
+    `Hemos recibido tu pedido ${order.id} en Martura Handmade.`,
+    `Estado actual: ${getOrderStatusLabel(order.status)}.`,
+    '',
+    'Resumen del pedido:',
+    ...previewLines,
+    '',
+    `Subtotal: ${formatCurrency(order.subtotal)}`,
+    discountText,
+    `Envío: ${formatCurrency(order.shipping)}`,
+    `Total: ${formatCurrency(order.total)}`,
+    '',
+    `Pago por Bizum: ${settings.bizumPhone}`,
+    `Correo de contacto: ${settings.contactEmail}`,
+    '',
+    'Gracias por confiar en Martura Handmade.',
+  ].join('\n');
+  const html = `
+    <p>Hola ${escapeHtml(order.customer.name)},</p>
+    <p>Hemos recibido tu pedido <strong>${escapeHtml(order.id)}</strong> en Martura Handmade.</p>
+    <p><strong>Estado actual:</strong> ${escapeHtml(getOrderStatusLabel(order.status))}</p>
+    ${renderOrderSummaryHtml(order)}
+    <p><strong>Pago por Bizum:</strong> ${escapeHtml(settings.bizumPhone)}<br />
+    <strong>Correo de contacto:</strong> ${escapeHtml(settings.contactEmail)}</p>
+    <p>Gracias por confiar en Martura Handmade.</p>
+  `;
+
+  await sendEmail({
+    to: customerEmail,
+    subject,
+    text,
+    html,
+    replyTo: settings.contactEmail,
+  });
+}
+
+async function sendNewOrderNotificationToAdmin(
+  order: CheckoutOrder,
+  settings: ShopEmailSettings,
+  adminEmail: string,
+): Promise<void> {
+  const subject = `Nuevo pedido ${order.id}`;
+  const text = [
+    `Se ha creado un nuevo pedido: ${order.id}`,
+    '',
+    `Cliente: ${order.customer.name}`,
+    `Email: ${order.customer.email}`,
+    `Teléfono: ${order.customer.phone}`,
+    `DNI: ${order.customer.dni}`,
+    `Dirección: ${order.customer.addressLine1}, ${order.customer.postalCode} ${order.customer.city}, ${order.customer.province}`,
+    order.customer.comments ? `Comentarios: ${order.customer.comments}` : 'Comentarios: sin comentarios',
+    '',
+    'Líneas del pedido:',
+    ...buildOrderLineTexts(order.items),
+    '',
+    `Subtotal: ${formatCurrency(order.subtotal)}`,
+    order.discount
+      ? `Descuento (${order.discount.code}): -${formatCurrency(order.discount.amount)}`
+      : 'Descuento: no aplica',
+    `Envío: ${formatCurrency(order.shipping)}`,
+    `Total: ${formatCurrency(order.total)}`,
+    `Bizum configurado: ${settings.bizumPhone}`,
+  ].join('\n');
+  const html = `
+    <p>Se ha creado un nuevo pedido: <strong>${escapeHtml(order.id)}</strong></p>
+    <ul>
+      <li><strong>Cliente:</strong> ${escapeHtml(order.customer.name)}</li>
+      <li><strong>Email:</strong> ${escapeHtml(order.customer.email)}</li>
+      <li><strong>Teléfono:</strong> ${escapeHtml(order.customer.phone)}</li>
+      <li><strong>DNI:</strong> ${escapeHtml(order.customer.dni)}</li>
+      <li><strong>Dirección:</strong> ${escapeHtml(order.customer.addressLine1)}, ${escapeHtml(order.customer.postalCode)} ${escapeHtml(order.customer.city)}, ${escapeHtml(order.customer.province)}</li>
+      <li><strong>Comentarios:</strong> ${escapeHtml(order.customer.comments || 'Sin comentarios')}</li>
+    </ul>
+    ${renderOrderSummaryHtml(order)}
+    <p><strong>Bizum configurado:</strong> ${escapeHtml(settings.bizumPhone)}</p>
+  `;
+
+  await sendEmail({
+    to: adminEmail,
+    subject,
+    text,
+    html,
+    replyTo: order.customer.email,
+  });
+}
+
+async function sendOrderStatusEmail(
+  order: CheckoutOrder,
+  previousStatus: OrderStatus,
+  settings: ShopEmailSettings,
+  customerEmail: string,
+): Promise<void> {
+  const subject = `Tu pedido ${order.id} ahora está ${getOrderStatusLabel(order.status)}`;
+  const text = [
+    `Hola ${order.customer.name},`,
+    '',
+    `Tu pedido ${order.id} ha cambiado de estado.`,
+    `Antes: ${getOrderStatusLabel(previousStatus)}`,
+    `Ahora: ${getOrderStatusLabel(order.status)}`,
+    '',
+    'Resumen:',
+    ...buildOrderLineTexts(order.items),
+    '',
+    `Total: ${formatCurrency(order.total)}`,
+    `Si necesitas escribirnos, puedes hacerlo en ${settings.contactEmail}.`,
+  ].join('\n');
+  const html = `
+    <p>Hola ${escapeHtml(order.customer.name)},</p>
+    <p>Tu pedido <strong>${escapeHtml(order.id)}</strong> ha cambiado de estado.</p>
+    <p><strong>Antes:</strong> ${escapeHtml(getOrderStatusLabel(previousStatus))}<br />
+    <strong>Ahora:</strong> ${escapeHtml(getOrderStatusLabel(order.status))}</p>
+    ${renderOrderSummaryHtml(order)}
+    <p>Si necesitas escribirnos, puedes hacerlo en <strong>${escapeHtml(settings.contactEmail)}</strong>.</p>
+  `;
+
+  await sendEmail({
+    to: customerEmail,
+    subject,
+    text,
+    html,
+    replyTo: settings.contactEmail,
+  });
+}
+
+async function sendContactMessageNotification(
+  message: ContactMessageRecord,
+  adminEmail: string,
+): Promise<void> {
+  const subject = `Nueva consulta desde la web (${message.name})`;
+  const text = [
+    'Se ha recibido una nueva consulta desde la web.',
+    '',
+    `Nombre: ${message.name}`,
+    `Email: ${message.email}`,
+    `Fecha: ${formatDateTime(message.createdAt)}`,
+    '',
+    message.body,
+  ].join('\n');
+  const html = `
+    <p>Se ha recibido una nueva consulta desde la web.</p>
+    <ul>
+      <li><strong>Nombre:</strong> ${escapeHtml(message.name)}</li>
+      <li><strong>Email:</strong> ${escapeHtml(message.email)}</li>
+      <li><strong>Fecha:</strong> ${escapeHtml(formatDateTime(message.createdAt))}</li>
+    </ul>
+    <p>${escapeHtml(message.body).replace(/\n/g, '<br />')}</p>
+  `;
+
+  await sendEmail({
+    to: adminEmail,
+    subject,
+    text,
+    html,
+    replyTo: message.email,
+  });
+}
+
+async function sendEmail(input: {
+  to: string;
+  subject: string;
+  text: string;
+  html: string;
+  replyTo?: string | null;
+}): Promise<void> {
+  const transport = getEmailTransport();
+
+  if (!transport) {
+    console.warn(`[email] Transporte SMTP no configurado. Se omite el envío a ${input.to}.`);
+    return;
+  }
+
+  const smtpUser = SMTP_USER.value().trim();
+  const defaultFrom = process.env.MAIL_FROM?.trim() || `Martura Handmade <${smtpUser}>`;
+
+  try {
+    await transport.sendMail({
+      from: defaultFrom,
+      to: input.to,
+      subject: input.subject,
+      text: input.text,
+      html: input.html,
+      replyTo: input.replyTo ?? undefined,
+    });
+  } catch (error) {
+    console.error(`[email] Error enviando "${input.subject}" a ${input.to}.`, error);
+  }
+}
+
+function getEmailTransport() {
+  const smtpUser = SMTP_USER.value().trim();
+  const smtpPass = SMTP_PASS.value().trim();
+
+  if (!smtpUser || !smtpPass) {
+    return null;
+  }
+
+  const host = process.env.SMTP_HOST?.trim() || 'smtp.gmail.com';
+  const port = Number(process.env.SMTP_PORT ?? '465');
+  const secure = (process.env.SMTP_SECURE ?? 'true').trim().toLowerCase() !== 'false';
+  const cacheKey = `${host}|${port}|${secure}|${smtpUser}`;
+
+  if (mailTransport && mailTransportCacheKey === cacheKey) {
+    return mailTransport;
+  }
+
+  mailTransport = nodemailer.createTransport({
+    host,
+    port,
+    secure,
+    auth: {
+      user: smtpUser,
+      pass: smtpPass,
+    },
+  });
+  mailTransportCacheKey = cacheKey;
+
+  return mailTransport;
+}
+
+function buildOrderLineTexts(items: OrderItem[]): string[] {
+  return items.map(
+    (item) =>
+      `- ${item.quantity} x ${item.productName}${item.variant ? ` (${item.variant})` : ''}: ${formatCurrency(item.lineTotal)}`,
+  );
+}
+
+function renderOrderSummaryHtml(order: CheckoutOrder): string {
+  const itemRows = order.items
+    .map(
+      (item) =>
+        `<tr>
+          <td style="padding: 6px 0;">${escapeHtml(`${item.quantity} x ${item.productName}${item.variant ? ` (${item.variant})` : ''}`)}</td>
+          <td style="padding: 6px 0; text-align: right;">${escapeHtml(formatCurrency(item.lineTotal))}</td>
+        </tr>`,
+    )
+    .join('');
+  const discountRow = order.discount
+    ? `<tr>
+        <td style="padding: 6px 0;">Descuento (${escapeHtml(order.discount.code)})</td>
+        <td style="padding: 6px 0; text-align: right;">-${escapeHtml(formatCurrency(order.discount.amount))}</td>
+      </tr>`
+    : '';
+
+  return `
+    <table style="width: 100%; border-collapse: collapse;">
+      <tbody>
+        ${itemRows}
+        <tr>
+          <td style="padding: 6px 0;"><strong>Subtotal</strong></td>
+          <td style="padding: 6px 0; text-align: right;"><strong>${escapeHtml(formatCurrency(order.subtotal))}</strong></td>
+        </tr>
+        ${discountRow}
+        <tr>
+          <td style="padding: 6px 0;">Envío</td>
+          <td style="padding: 6px 0; text-align: right;">${escapeHtml(formatCurrency(order.shipping))}</td>
+        </tr>
+        <tr>
+          <td style="padding: 6px 0;"><strong>Total</strong></td>
+          <td style="padding: 6px 0; text-align: right;"><strong>${escapeHtml(formatCurrency(order.total))}</strong></td>
+        </tr>
+      </tbody>
+    </table>
+  `;
+}
+
+function formatCurrency(value: number): string {
+  return new Intl.NumberFormat('es-ES', {
+    style: 'currency',
+    currency: 'EUR',
+  }).format(value);
+}
+
+function formatDateTime(value: Date): string {
+  return new Intl.DateTimeFormat('es-ES', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+    timeZone: MAIL_TIME_ZONE,
+  }).format(value);
+}
+
+function getOrderStatusLabel(status: OrderStatus): string {
+  switch (status) {
+    case 'in_factory':
+      return 'En fábrica';
+    case 'accepted':
+      return 'Aceptado';
+    case 'shipped':
+      return 'Enviado';
+    case 'delivered':
+      return 'Entregado';
+    case 'cancelled':
+      return 'Cancelado';
+    default:
+      return status;
+  }
+}
+
+function normalizeEmail(value: string | null | undefined): string | null {
+  const email = sanitizeString(value).toLowerCase();
+  return email || null;
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
 }
 
 function serializeOrder(order: CheckoutOrder): SerializedCheckoutOrder {
