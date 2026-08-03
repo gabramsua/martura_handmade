@@ -81,9 +81,6 @@ export class AuthService {
         const provider = new GoogleAuthProvider();
         provider.setCustomParameters({
           prompt: 'select_account',
-          ...(credentials.role === 'admin' && credentials.email
-            ? { login_hint: credentials.email }
-            : {}),
         });
 
         const { user } = await signInWithPopup(this.firebaseAuth, provider);

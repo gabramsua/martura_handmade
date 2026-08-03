@@ -5,7 +5,7 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
-import { environment } from '../../../environments/environment';
+import { primaryAdminEmail } from '../../core/firebase/firebase.config';
 import { AlertsService } from '../../core/services/alerts.service';
 import { AuthService } from '../../core/services/auth.service';
 
@@ -29,7 +29,7 @@ export class Login {
   readonly isEmulatorMode = this.authMode === 'emulator';
   readonly user$ = this.authService.user$;
   readonly returnUrl = this.route.snapshot.queryParamMap.get('returnUrl') ?? '/admin';
-  readonly adminEmail = environment.firebase.adminEmails[0] ?? '';
+  readonly adminEmail = primaryAdminEmail;
   readonly loginForm = this.formBuilder.nonNullable.group({
     name: ['Virginia Admin', [Validators.required]],
     email: [this.adminEmail, [Validators.required, Validators.email]],
@@ -70,7 +70,7 @@ export class Login {
         this.isFirebasePopupMode
           ? {
               name: '',
-              email: this.adminEmail,
+              email: '',
               role: 'admin',
             }
           : this.loginForm.getRawValue(),

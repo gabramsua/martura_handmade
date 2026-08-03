@@ -6,7 +6,7 @@ import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { FirebaseError } from 'firebase/app';
 import { combineLatest, map, startWith } from 'rxjs';
 
-import { authMode } from '../../core/firebase/firebase.config';
+import { authMode, primaryAdminEmail } from '../../core/firebase/firebase.config';
 import {
   Campaign,
   CampaignDiscountType,
@@ -41,7 +41,6 @@ import { CatalogTaxonomy } from '../../core/models/taxonomy.model';
 import { AboutArticle, HeroSlide, ShopSettings } from '../../core/models/shop-settings.model';
 import { resolveProductPricing } from '../../core/utils/product-pricing';
 import { slugify } from '../../core/utils/slug';
-import { environment } from '../../../environments/environment';
 import { AdminMaintenanceService } from '../../core/services/admin-maintenance.service';
 import { AlertsService } from '../../core/services/alerts.service';
 import { CampaignsService } from '../../core/services/campaigns.service';
@@ -120,7 +119,7 @@ export class Admin {
     direction: 'asc',
   });
   readonly selectorQueries = signal<Record<string, string>>({});
-  readonly adminEmailHint = environment.firebase.adminEmails[0] ?? 'correo administrador';
+  readonly adminEmailHint = primaryAdminEmail || 'correo administrador';
   readonly catalogSort$ = toObservable(this.catalogSort);
 
   readonly navItems: AdminNavItem[] = [

@@ -17,6 +17,9 @@ export const authMode = !isFirebaseConfigured
     ? 'emulator'
     : 'firebase';
 
+export const primaryAdminEmail =
+  environment.firebase.primaryAdminEmail || environment.firebase.adminEmails[0] || '';
+
 export const firestoreCollections = {
   campaigns: 'campaigns',
   contactMessages: 'contactMessages',
