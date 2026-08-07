@@ -119,3 +119,23 @@
     align-items: start;
   }
 }
+
+@media (max-width: 560px) {
+  .cart-shell {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .cart-item {
+    gap: 12px;
+    padding: 10px;
+  }
+
+  .quantity-row {
+    flex-wrap: wrap;
+  }
+
+  .remove-button {
+    width: 100%;
+  }
+}

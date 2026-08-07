@@ -1,16 +1,14 @@
 .site-header {
-  align-items: center;
   background: rgba(250, 242, 235, 0.92);
+  backdrop-filter: blur(18px);
   border-bottom: 1px solid var(--line);
   display: grid;
   gap: 16px;
-  grid-template-columns: 1fr auto 1fr;
-  min-height: 76px;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   padding: 14px clamp(18px, 5vw, 64px);
   position: sticky;
   top: 0;
-  z-index: 10;
-  backdrop-filter: blur(18px);
+  z-index: 30;
 }
 
 .brand {
@@ -49,11 +47,25 @@
   font-size: 0.78rem;
 }
 
+.header-quick-actions {
+  display: none;
+}
+
+.header-panel {
+  align-items: center;
+  display: grid;
+  gap: 16px;
+  grid-column: 2 / 4;
+  grid-template-columns: auto minmax(0, 1fr);
+  min-width: 0;
+}
+
 .main-nav {
   align-items: center;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  justify-content: center;
 }
 
 .header-actions {
@@ -75,16 +87,33 @@
   padding: 10px 14px;
 }
 
+.main-nav a,
+.session-role,
+.session-button,
+.cart-link {
+  align-items: center;
+  display: inline-flex;
+  justify-content: center;
+  text-decoration: none;
+}
+
 .session-label {
   color: var(--ink);
   display: grid;
   gap: 2px;
   line-height: 1.1;
+  max-width: 230px;
+  min-width: 0;
+  padding-left: 0;
+  padding-right: 0;
 }
 
 .session-label strong,
 .session-label small {
   display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .session-label small {
@@ -98,7 +127,6 @@
   color: var(--rose-dark);
   font-size: 0.78rem;
   font-weight: 900;
-  text-decoration: none;
   text-transform: uppercase;
 }
 
@@ -118,20 +146,12 @@
 }
 
 .cart-link {
-  align-items: center;
-  display: inline-flex;
   gap: 8px;
 }
 
-.cart-link-disabled {
-  background: rgba(239, 225, 211, 0.36);
-  color: #b09b8d;
-  cursor: default;
-}
-
-.cart-link-disabled:hover {
-  background: rgba(239, 225, 211, 0.36);
-  color: #b09b8d;
+.cart-link-mobile,
+.menu-toggle {
+  display: none;
 }
 
 .cart-link strong {
@@ -146,12 +166,9 @@
   width: 24px;
 }
 
-.cart-link-disabled strong {
-  background: #d6ccc4;
-}
-
 main {
   min-height: calc(100vh - 156px);
+  overflow-x: clip;
 }
 
 .site-footer {
@@ -173,24 +190,124 @@ main {
   font-weight: 800;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 980px) {
   .site-header {
-    grid-template-columns: 1fr auto;
+    gap: 12px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    padding: 14px 18px;
   }
 
-  .main-nav {
+  .header-quick-actions {
+    align-items: center;
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+  }
+
+  .header-panel {
+    border-top: 1px solid rgba(231, 217, 204, 0.92);
+    display: none;
+    gap: 14px;
     grid-column: 1 / -1;
-    justify-content: center;
-    order: 3;
+    grid-template-columns: 1fr;
+    padding-top: 14px;
+  }
+
+  .header-panel-open {
+    display: grid;
+  }
+
+  .main-nav,
+  .header-actions {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .main-nav a,
+  .session-role,
+  .session-button,
+  .cart-link {
+    justify-content: space-between;
+    width: 100%;
   }
 
   .header-actions {
     justify-content: flex-start;
   }
 
+  .session-label {
+    background: rgba(239, 225, 211, 0.52);
+    border-radius: 16px;
+    max-width: none;
+    padding: 12px 14px;
+  }
+
+  .cart-link-mobile {
+    display: inline-flex;
+  }
+
+  .cart-link-desktop {
+    display: none;
+  }
+
+  .menu-toggle {
+    align-items: center;
+    background: rgba(239, 225, 211, 0.72);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    display: inline-flex;
+    flex-direction: column;
+    gap: 4px;
+    justify-content: center;
+    min-height: 42px;
+    padding: 0;
+    width: 42px;
+  }
+
+  .menu-toggle span {
+    background: var(--ink);
+    border-radius: 999px;
+    display: block;
+    height: 2px;
+    transition: transform 0.2s ease, opacity 0.2s ease;
+    width: 16px;
+  }
+
+  .site-header-open .menu-toggle span:nth-child(1) {
+    transform: translateY(6px) rotate(45deg);
+  }
+
+  .site-header-open .menu-toggle span:nth-child(2) {
+    opacity: 0;
+  }
+
+  .site-header-open .menu-toggle span:nth-child(3) {
+    transform: translateY(-6px) rotate(-45deg);
+  }
+}
+
+@media (max-width: 720px) {
   .site-footer {
     align-items: flex-start;
     flex-direction: column;
     gap: 12px;
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+}
+
+@media (max-width: 560px) {
+  .site-header {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .brand strong {
+    font-size: 1.12rem;
+  }
+
+  .brand small {
+    font-size: 0.72rem;
   }
 }

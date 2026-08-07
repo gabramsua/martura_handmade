@@ -289,3 +289,32 @@ textarea {
     white-space: normal;
   }
 }
+
+@media (max-width: 560px) {
+  .checkout-shell {
+    gap: 22px;
+    padding: 28px 16px 42px;
+  }
+
+  .checkout-form,
+  .order-preview,
+  .order-confirmation,
+  .confirmation-card {
+    padding: 16px;
+  }
+
+  .button,
+  .confirmation-actions .button {
+    width: 100%;
+  }
+
+  .confirmation-items article {
+    grid-template-columns: 1fr;
+  }
+
+  .confirmation-items img {
+    aspect-ratio: 4 / 3;
+    height: auto;
+    width: 100%;
+  }
+}

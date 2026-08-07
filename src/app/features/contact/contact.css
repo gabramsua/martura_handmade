@@ -112,3 +112,25 @@ textarea {
     grid-template-columns: 1fr;
   }
 }
+
+@media (max-width: 720px) {
+  .contact-shell {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+}
+
+@media (max-width: 560px) {
+  .contact-shell {
+    padding: 28px 16px 42px;
+  }
+
+  .contact-form,
+  .contact-card {
+    padding: 16px;
+  }
+
+  .button {
+    width: 100%;
+  }
+}

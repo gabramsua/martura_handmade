@@ -251,13 +251,46 @@
   }
 
   .filters-meta,
-  .product-footer,
-  .product-actions {
+  .product-footer {
     align-items: stretch;
     flex-direction: column;
   }
 
   .offers-toggle {
     margin-right: 0;
+  }
+
+  .product-actions {
+    align-items: center;
+    flex-direction: row;
+    width: 100%;
+  }
+
+  .add-button {
+    flex: 1 1 auto;
+  }
+}
+
+@media (max-width: 560px) {
+  .catalog-page {
+    padding: 28px 16px 0;
+  }
+
+  .filters-panel,
+  .product-content {
+    padding: 16px;
+  }
+
+  .filters-meta {
+    gap: 10px;
+  }
+
+  .catalog-summary,
+  .clear-filters {
+    width: 100%;
+  }
+
+  .clear-filters {
+    justify-content: center;
   }
 }

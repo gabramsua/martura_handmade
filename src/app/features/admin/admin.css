@@ -77,6 +77,10 @@
   gap: 10px;
 }
 
+.sidebar-actions {
+  display: grid;
+}
+
 .nav-item {
   align-items: flex-start;
   background: transparent;
@@ -655,19 +659,128 @@ button:disabled,
 @media (max-width: 1180px) {
   .admin-shell {
     grid-template-columns: 1fr;
+    padding: 20px;
   }
 
   .admin-sidebar {
     position: static;
   }
+
+  .admin-nav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .sidebar-actions .button {
+    width: 100%;
+  }
 }
 
 @media (max-width: 980px) {
+  .admin-shell {
+    gap: 18px;
+    padding: 18px;
+  }
+
+  .panel,
+  .admin-sidebar {
+    padding: 18px;
+  }
+
   .table-head,
+  .orders-table-head {
+    display: none;
+  }
+
   .table-row,
-  .orders-table-head,
   .orders-table-row {
+    gap: 10px;
     grid-template-columns: 1fr;
+  }
+
+  .table-row,
+  .orders-table-row > span {
+    min-width: 0;
+  }
+
+  .table-row > span,
+  .orders-table-row > span {
+    display: grid;
+    gap: 4px;
+  }
+
+  .table-row > span::before,
+  .orders-table-row > span::before {
+    color: var(--muted);
+    font-size: 0.74rem;
+    font-weight: 800;
+    text-transform: uppercase;
+  }
+
+  .table-row > span:nth-child(1)::before {
+    content: 'Producto';
+  }
+
+  .table-row > span:nth-child(2)::before {
+    content: 'Orden';
+  }
+
+  .table-row > span:nth-child(3)::before {
+    content: 'Clasificación';
+  }
+
+  .table-row > span:nth-child(4)::before {
+    content: 'Precio';
+  }
+
+  .table-row > span:nth-child(5)::before {
+    content: 'Promo';
+  }
+
+  .table-row > span:nth-child(6)::before {
+    content: 'Estado';
+  }
+
+  .table-row > span:nth-child(7)::before {
+    content: 'Stock';
+  }
+
+  .table-row > span:nth-child(8)::before {
+    content: 'Acciones';
+  }
+
+  .orders-table-row {
+    align-items: start;
+    padding-right: 46px;
+  }
+
+  .orders-table-row > span:nth-child(1)::before {
+    content: 'Pedido';
+  }
+
+  .orders-table-row > span:nth-child(2)::before {
+    content: 'Fecha';
+  }
+
+  .orders-table-row > span:nth-child(3)::before {
+    content: 'Cliente';
+  }
+
+  .orders-table-row > span:nth-child(4)::before {
+    content: 'Importe';
+  }
+
+  .orders-table-row > span:nth-child(5)::before {
+    content: 'Estado';
+  }
+
+  .order-accordion summary::after {
+    right: 16px;
+    top: 24px;
+    transform: rotate(45deg);
+  }
+
+  .order-accordion[open] summary::after {
+    transform: rotate(225deg);
   }
 }
 
@@ -685,6 +798,10 @@ button:disabled,
     flex-direction: column;
   }
 
+  .mode-pill {
+    width: fit-content;
+  }
+
   .product-form {
     grid-template-columns: 1fr;
   }
@@ -700,6 +817,65 @@ button:disabled,
   .toolbar input[type='search'],
   .toolbar > select,
   .toolbar-field {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .stack-row,
+  .order-line,
+  .selector-option {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .row-actions {
+    width: 100%;
+  }
+
+  .row-actions > .button,
+  .form-actions > .button,
+  .order-actions > .button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 720px) {
+  .admin-shell {
+    gap: 16px;
+    min-height: auto;
+    padding: 16px;
+  }
+
+  .admin-sidebar,
+  .panel,
+  .settings-subpanel,
+  .hero-settings-card {
+    padding: 16px;
+  }
+
+  .admin-nav {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-header h1 {
+    font-size: clamp(1.55rem, 7vw, 2rem);
+  }
+
+  .nav-item {
+    min-height: 0;
+    padding: 12px 14px;
+  }
+
+  .selector-panel,
+  .selector-list {
+    padding: 10px;
+  }
+
+  .selector-list {
+    max-height: 200px;
+  }
+
+  .danger-button {
     min-width: 0;
     width: 100%;
   }

@@ -248,3 +248,32 @@
     grid-template-columns: 1fr;
   }
 }
+
+@media (max-width: 560px) {
+  .detail-shell {
+    gap: 24px;
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .detail-info h1 {
+    font-size: clamp(2.2rem, 11vw, 3.25rem);
+    margin-bottom: 14px;
+  }
+
+  .price-row,
+  .detail-actions,
+  .detail-meta div {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .variant-list button,
+  .detail-actions > * {
+    width: 100%;
+  }
+
+  .detail-meta dd {
+    text-align: left;
+  }
+}

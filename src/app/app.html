@@ -1,5 +1,5 @@
-<header class="site-header">
-  <a class="brand" routerLink="/" aria-label="Martura Handmade">
+<header class="site-header" [class.site-header-open]="mobileMenuOpen()">
+  <a class="brand" routerLink="/" aria-label="Martura Handmade" (click)="closeMobileMenu()">
     <span class="brand-mark">M</span>
     <span>
       <strong>Martura</strong>
@@ -7,40 +7,61 @@
     </span>
   </a>
 
-  <nav class="main-nav" aria-label="Navegación principal">
-    <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Home</a>
-    <a routerLink="/catalogo" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Catálogo</a>
-    <a routerLink="/sobre-mi" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Sobre mí</a>
-    <a routerLink="/consultas" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Consultas</a>
-  </nav>
-
-  <div class="header-actions">
+  <div class="header-quick-actions">
     @if (shouldShowCart()) {
       @if (cartItems$ | async; as totalItems) {
         @if (totalItems > 0) {
-          <a class="cart-link" routerLink="/carrito" aria-label="Ver carrito">
-            <span>Mi carrito</span>
+          <a class="cart-link cart-link-mobile" routerLink="/carrito" aria-label="Ver carrito" (click)="closeMobileMenu()">
+            <span>Carrito</span>
             <strong>{{ totalItems }}</strong>
           </a>
-        } @else {
-          <span class="cart-link cart-link-disabled" aria-disabled="true">
-            <span>Mi carrito</span>
-            <strong>0</strong>
-          </span>
         }
       }
     }
 
-    @if (user$ | async; as user) {
-      @if (isAdmin$ | async) {
-        <a class="session-role" routerLink="/admin" routerLinkActive="active">Dashboard</a>
+    <button
+      type="button"
+      class="menu-toggle"
+      aria-label="Abrir menú"
+      [attr.aria-expanded]="mobileMenuOpen()"
+      (click)="toggleMobileMenu()">
+      <span></span>
+      <span></span>
+      <span></span>
+    </button>
+  </div>
+
+  <div class="header-panel" [class.header-panel-open]="mobileMenuOpen()">
+    <nav class="main-nav" aria-label="Navegación principal">
+      <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }" (click)="closeMobileMenu()">Home</a>
+      <a routerLink="/catalogo" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }" (click)="closeMobileMenu()">Catálogo</a>
+      <a routerLink="/sobre-mi" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }" (click)="closeMobileMenu()">Sobre mí</a>
+      <a routerLink="/consultas" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }" (click)="closeMobileMenu()">Consultas</a>
+    </nav>
+
+    <div class="header-actions">
+      @if (shouldShowCart()) {
+        @if (cartItems$ | async; as totalItems) {
+          @if (totalItems > 0) {
+            <a class="cart-link cart-link-desktop" routerLink="/carrito" aria-label="Ver carrito" (click)="closeMobileMenu()">
+              <span>Mi carrito</span>
+              <strong>{{ totalItems }}</strong>
+            </a>
+          }
+        }
       }
-      <span class="session-label">
-        <strong>{{ user.name }}</strong>
-        <small>{{ user.email }}</small>
-      </span>
-      <button type="button" class="session-button" (click)="logout()">Salir</button>
-    }
+
+      @if (user$ | async; as user) {
+        @if (isAdmin$ | async) {
+          <a class="session-role" routerLink="/admin" routerLinkActive="active" (click)="closeMobileMenu()">Dashboard</a>
+        }
+        <span class="session-label">
+          <strong>{{ user.name }}</strong>
+          <small>{{ user.email }}</small>
+        </span>
+        <button type="button" class="session-button" (click)="logout()">Salir</button>
+      }
+    </div>
   </div>
 </header>
 

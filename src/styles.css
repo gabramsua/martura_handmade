@@ -33,6 +33,7 @@ body {
     var(--paper);
   margin: 0;
   color: var(--ink);
+  min-width: 320px;
 }
 
 img {

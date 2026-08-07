@@ -144,3 +144,16 @@
 .provider-copy {
   margin: 0;
 }
+
+@media (max-width: 560px) {
+  .login-shell {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .current-user button,
+  .provider-button,
+  .login-panel form button {
+    width: 100%;
+  }
+}
